@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Metformin",
+    "rxcui": "6809"
+  },
+  {
+    "name": "Lisinopril",
+    "rxcui": "29046"
+  },
+  {
+    "name": "Atorvastatin",
+    "rxcui": "83367"
+  }
+]

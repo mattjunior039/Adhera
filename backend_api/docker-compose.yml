@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pillbox-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pillbox
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pillbox-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      # Automatically points the API to the new database container
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/pillbox
+      # Path inside container. Mount your service account JSON at this location.
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
+      # RxNorm name canonicalization mode: api | local | both
+      RXNORM_LOOKUP_MODE: ${RXNORM_LOOKUP_MODE:-api}
+      RXNORM_LOCAL_PATH: ${RXNORM_LOCAL_PATH:-/app/datasets/rxnorm_names.json}
+      RXNORM_API_TIMEOUT_SECONDS: ${RXNORM_API_TIMEOUT_SECONDS:-4.0}
+      # Optional local model endpoint for SIG normalization.
+      LOCAL_SIG_LLM_ENDPOINT: ${LOCAL_SIG_LLM_ENDPOINT:-}
+      LOCAL_SIG_LLM_MODEL: ${LOCAL_SIG_LLM_MODEL:-llama3:8b}
+    volumes:
+      - ./uploads:/app/uploads
+      # Optional local RxNorm-derived dataset.
+      - ./datasets:/app/datasets:ro
+      # Keep read-only for secret files.
+      - ./secrets:/app/secrets:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
