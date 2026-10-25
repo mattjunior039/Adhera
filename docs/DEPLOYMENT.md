@@ -1,98 +1,89 @@
-# Backend Deployment Notes
+# Deployment
 
-This backend uses OpenCV + OCR and requires system-level packages in production.
+This guide covers running the backend with Docker and PostgreSQL, the
+configuration options, and what to change before a real deployment. For local
+development with SQLite, see the [root README](../README.md#getting-started).
 
-## Why this is required
+## Docker Compose
 
-- `opencv-python-headless` still links to native runtime libraries (`libgl1`, `libglib2.0-0`, etc.).
-- Tesseract OCR requires the OS binary (`tesseract-ocr`) and language data (`tesseract-ocr-eng`).
-- Google Vision requires cloud credentials (`GOOGLE_APPLICATION_CREDENTIALS`) or workload identity.
+`backend_api/docker-compose.yml` starts two containers:
 
-## Docker quick start
+| Service | Image | Host address |
+| --- | --- | --- |
+| `db` | PostgreSQL 15 | `127.0.0.1:5433` |
+| `api` | Built from `backend_api/Dockerfile` (Python 3.11) | `http://127.0.0.1:8001` |
 
 ```bash
 cd backend_api
-cp .env.example .env
-mkdir -p secrets
-# put your service account json at backend_api/secrets/google-credentials.json
-
+cp .env.example .env        # add GEMINI_API_KEY
 docker compose up --build
+curl http://127.0.0.1:8001/health
 ```
 
-Health check:
+The API container is published on port 8001 so it never collides with a native
+development server on port 8000. Point the app at it explicitly:
 
 ```bash
-curl http://localhost:8000/health
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8001
 ```
 
-## Credentials options
+Compose also:
 
-- Local/dev: mount a service-account JSON and set `GOOGLE_APPLICATION_CREDENTIALS`.
-- GCP Workload Identity / AWS IAM style runtime credentials: avoid static key files where possible.
+- sets `DATABASE_URL` to the `db` container,
+- mounts `backend_api/runs/` at `/app/runs` so locally trained model checkpoints are available,
+- mounts `services/`, `routers/`, and `main.py` so code changes apply without rebuilding the image,
+- keeps downloaded model weights (DINOv2) on the `model_cache` volume.
 
-## RxNorm integration options
+## Configuration
 
-- `RXNORM_LOOKUP_MODE=api`: always use RxNav API.
-- `RXNORM_LOOKUP_MODE=local`: use a local JSON file only.
-- `RXNORM_LOOKUP_MODE=both`: try local first, then API fallback.
-- `RXNORM_ALLOWED_TTYS=SCD,SBD,IN,BN`: restrict matching to clinical drug and brand/ingredient terms.
+All settings are environment variables. `backend_api/.env.example` lists every
+one with comments. The most important are:
 
-Optional local file setup:
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` / `USE_SQLITE` / `POSTGRES_*` | Database selection. SQLite is the default; `DATABASE_URL` takes priority. |
+| `GEMINI_API_KEY` | Required for prescription label extraction. |
+| `RXNORM_LOOKUP_MODE` | `api`, `local`, or `both` (local file first, then the NIH RxNav API). |
+| `PILL_EMBEDDING_DEVICE` | Torch device for DINOv2: `cpu`, `cuda`, or `mps`. |
+| `OFFICIAL_PILL_CHECKPOINT`, `OFFICIAL_COMPARTMENT_CHECKPOINT`, `OFFICIAL_VIDEO_DEVICE` | Video verification models and device. |
+| `PILL_DETECTION_MODEL_PATH` | Loose-pill detector used by `/pills/analyze`. |
+| `PRELOAD_PILL_MODELS` | Load the pill models at start-up instead of on first use. |
+
+If a model file is missing, its endpoint returns HTTP 503 with an explanation.
+The rest of the API keeps working.
+
+## Optional local RxNorm dataset
+
+A local names file avoids depending on the RxNav API for every lookup.
+`backend_api/datasets/rxnorm_names.sample.json` shows the format.
 
 ```bash
-mkdir -p backend_api/datasets
-# put your RxNorm-derived JSON into backend_api/datasets/rxnorm_names.json
+python -m backend_api.scripts.validate_rxnorm_local backend_api/datasets/rxnorm_names.json
 ```
 
-Sample schema file:
+Then set `RXNORM_LOCAL_PATH` to that file and `RXNORM_LOOKUP_MODE=both`.
 
-- `backend_api/datasets/rxnorm_names.sample.json`
+## Tuning the label quality check
 
-Validate your dataset before startup:
+To tune the blur, exposure, contrast, and skew thresholds on your own label
+photos:
 
 ```bash
-cd backend_api
-python scripts/validate_rxnorm_local.py datasets/rxnorm_names.json
+python -m backend_api.scripts.tune_ocr_quality /path/to/label-photos
 ```
 
-Set in `.env`:
+## Before a production deployment
 
-```bash
-RXNORM_LOOKUP_MODE=both
-RXNORM_LOCAL_PATH=/app/datasets/rxnorm_names.json
-RXNORM_ALLOWED_TTYS=SCD,SBD,IN,BN
-RXNORM_API_TIMEOUT_SECONDS=4.0
-LOCAL_FIELD_LLM_MAX_CHARS=6000
-```
-
-## OCR decision policy
-
-- Primary engine is Google Cloud Vision `DOCUMENT_TEXT_DETECTION` on the full image.
-- Spatial center filtering is applied in-memory via Vision bounding boxes (non-destructive).
-- Device OCR text is fallback-only when cloud OCR fails due service outage/quota/timeout.
-- Tesseract is last-resort fallback when cloud OCR is unavailable.
-
-## OCR quality threshold tuning
-
-Use this utility on a folder of real prescription-label photos to tune blur/exposure/contrast/skew defaults:
-
-```bash
-cd backend_api
-python scripts/tune_ocr_quality.py /path/to/label-images
-```
-
-The script prints percentile-based suggested thresholds that you can use to update quality-gate defaults.
-
-## Temp file cleanup
-
-Prescription scan uploads are cleaned in a `finally` block in router code:
-
-- `backend_api/routers/photo_events.py`
-
-This prevents temp file buildup and disk exhaustion.
-
-## Production notes
-
-- Keep `uploads/` on durable storage if you need retention.
-- Configure log rotation and disk alerts.
-- Enforce request size limits at ingress/proxy.
+- **Authentication:** sign-in does not issue tokens yet, and endpoints accept a
+  `user_id` in the path. Add token-based authentication before exposing the API
+  beyond a trusted network.
+- **HTTPS and CORS:** serve the API over HTTPS, and replace the wildcard CORS
+  setting in `main.py` with your app's origins.
+- **Request limits:** video uploads are capped at 50 MiB in code. Also enforce
+  request-size limits at the proxy or ingress.
+- **Storage:** keep `uploads/` on durable storage if you need to retain
+  evidence. Each video's `.analysis.json` report should stay with its upload.
+  Temporary prescription-scan files are deleted automatically after each request.
+- **Migrations:** tables are created at start-up, and newer optional columns are
+  added automatically. Use Alembic (`backend_api/alembic/`) for any other schema changes.
+- **Operations:** configure log rotation and disk-usage alerts.

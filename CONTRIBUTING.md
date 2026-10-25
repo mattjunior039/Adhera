@@ -1,39 +1,44 @@
 # Contributing
 
-## Branching
+## Workflow
 
 1. Create a feature branch from `main`.
-2. Keep pull requests focused and small when possible.
-3. Rebase or merge `main` before opening a PR.
+2. Keep changes focused. Update the relevant documentation in the same change.
+3. Run the checks below before opening a pull request.
 
-## Local checks before PR
+## Checks
 
-### Backend
-
-```bash
-cd backend_api
-source .venv/bin/activate
-python -m pytest tests
-```
-
-### Mobile
+From the repository root:
 
 ```bash
+# Backend tests
+python -m unittest discover -s backend_api/tests
+
+# Backend lint and format (Ruff, configured in backend_api/ruff.toml)
+ruff check backend_api && ruff format --check backend_api
+
+# Mobile app
 cd mobile_app
+dart format --set-exit-if-changed lib test
 flutter analyze
 flutter test
 ```
 
+## Conventions
+
+- **Backend:** keep routers thin and put logic in `services/`. Import with the
+  `backend_api.` package path. Put tests in `backend_api/tests/` and runnable
+  utilities in `backend_api/scripts/`.
+- **Mobile app:** use one file per screen in `lib/screens/`, reusable UI in
+  `lib/widgets/`, and REST access in `lib/repositories/`.
+- **Safety:** vision results must stay review-only. Never give the schedule or
+  the expected answer to a model.
+
 ## Secrets and local files
 
-- Never commit `.env` files.
-- Never commit service account JSON credentials.
-- Never commit local SQLite DB files, uploads, logs, or build artifacts.
+Never commit `.env` files, credentials, databases, uploads, patient media,
+model checkpoints in `backend_api/runs/`, or build output. `.gitignore` already
+excludes them.
 
-## Updating config keys
-
-When adding new environment keys:
-
-1. Add documented defaults/comments to `backend_api/.env.example`.
-2. Mention the change in the pull request description.
-3. Notify collaborators to update local `.env`.
+When you add a configuration key, document it in `backend_api/.env.example`
+and mention it in the pull request.
