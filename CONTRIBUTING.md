@@ -24,6 +24,14 @@ flutter analyze
 flutter test
 ```
 
+```bash
+# Website
+cd website
+npm ci
+npm run lint
+npm run build
+```
+
 ## Conventions
 
 - **Backend:** keep routers thin and put logic in `services/`. Import with the
@@ -31,6 +39,8 @@ flutter test
   utilities in `backend_api/scripts/`.
 - **Mobile app:** use one file per screen in `lib/screens/`, reusable UI in
   `lib/widgets/`, and REST access in `lib/repositories/`.
+- **Website:** edit page text in `website/src/content.ts`. Changes to
+  `website/` on `main` are deployed to GitHub Pages automatically.
 - **Safety:** vision results must stay review-only. Never give the schedule or
   the expected answer to a model.
 

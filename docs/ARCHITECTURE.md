@@ -1,9 +1,12 @@
 # Architecture
 
-Adhera has two parts that communicate over a REST API:
+Adhera's software has two parts that communicate over a REST API, plus a project website:
 
 - **`mobile_app/`**: a Flutter app for iOS and macOS. It handles screens, the camera, on-device text recognition, and session state.
-- **`backend_api/`**: a FastAPI service. It handles storage, validation, business rules, OCR, and computer vision.
+- **`backend_api/`**: a FastAPI service that runs on the local network. It handles storage, validation, business rules, label parsing, and computer vision.
+- **`website/`**: the public project website (React, Vite, Three.js), published to GitHub Pages at <https://mattjunior039.github.io/PillBox/> by `.github/workflows/website.yml`.
+
+All image processing (label photos, pill photos, and pillbox video) happens on the phone or the Adhera backend. The only external request is the drug-name lookup in NIH RxNorm, which can also use a local RxNorm file.
 
 The backend publishes its exact API contract at `/docs` (Swagger UI) and `/openapi.json` while it is running.
 
@@ -95,9 +98,10 @@ Tables are created at start-up. `init_db()` also adds any newer optional columns
 ### Prescription label reading (`services/ocr_service.py`)
 
 1. **Quality check:** OpenCV measures blur (Laplacian variance), exposure, contrast, and skew, and rejects unreadable images with a reason.
-2. **Label flattening:** the image is rotated using its EXIF data, the label outline is found, and a perspective warp flattens it. Several views are combined into one image.
-3. **Extraction:** Google **Gemini 2.5 Flash** returns structured JSON (drug, strength, directions, prescriber, pharmacy, refills). Text read on the phone is included as a hint. This requires `GEMINI_API_KEY`.
-4. **Drug-name check (`rxnorm_service.py`, `drug_dictionary.py`):** names are matched against the NIH **RxNorm** API (RxNav), a local RxNorm file, or both. Matching uses Jaro-Winkler similarity from `rapidfuzz`. Text that looks like instructions (for example "DAILY AS NEEDED") is rejected as a drug name.
+2. **Label flattening:** the image is rotated using its EXIF data, the label outline is found, and a perspective warp flattens it. Several views are combined into one preview that the patient checks.
+3. **Text recognition (on the phone):** Apple Vision (iOS) or Google ML Kit reads the text in every captured view. A curved bottle shows different text in each view, so all of it is sent together.
+4. **Field extraction (`parse_label_text`):** a local parser finds the drug line (lines with a strength such as "200 MG" first), the strength, the directions (lines starting with "Take", "Apply", "Inhale", and so on), refills, prescriber, and pharmacy. If the drug name doesn't match or the directions are missing, the result is flagged for the patient to complete by hand.
+5. **Drug-name check (`rxnorm_service.py`, `drug_dictionary.py`):** names are matched against the NIH **RxNorm** API (RxNav), a local RxNorm file, or both. Matching uses Jaro-Winkler similarity from `rapidfuzz`. Text that looks like instructions (for example "DAILY AS NEEDED") is rejected as a drug name.
 
 ### Pill identification (`services/pill_identity.py`, `pill_reference_service.py`)
 

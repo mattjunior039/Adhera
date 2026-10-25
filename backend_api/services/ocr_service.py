@@ -1,15 +1,19 @@
-"""OCR pipeline for prescription label scanning using Gemini LLM.
+"""Local prescription label scanning.
 
-Pipeline goals:
-- quality control gate before OCR
-- automatic label-region flattening and crop before AI extraction
-- Gemini structured output (JSON) extraction via google-genai
+Pipeline:
+- quality gate (blur, exposure, contrast, skew) before parsing
+- automatic label-region flattening and crop for the review preview
+- field extraction from the text the phone recognized on-device
+- drug-name normalization against NIH RxNorm (see drug_dictionary.py)
+
+Label images are processed on the Adhera backend and are never sent to an
+external service. Only the candidate drug name is looked up in RxNorm.
 """
 
 from __future__ import annotations
 
 import base64
-import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -43,8 +47,8 @@ def _quality_gate(img: np.ndarray) -> Dict[str, Union[bool, float, str]]:
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=60, minLineLength=60, maxLineGap=8)
     angles = []
     if lines is not None:
-        for line in lines[:100]:
-            x1, y1, x2, y2 = line[0]
+        # OpenCV 4 returns shape (N, 1, 4); OpenCV 5 returns (N, 4).
+        for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4)[:100]:
             angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
             if -45 <= angle <= 45:
                 angles.append(abs(float(angle)))
@@ -88,7 +92,7 @@ def _apply_exif_orientation(image_path: Union[str, Path], fallback: np.ndarray) 
         return fallback
 
 
-def _normalize_for_cloud_ocr(img: np.ndarray) -> np.ndarray:
+def _normalize_label_view(img: np.ndarray) -> np.ndarray:
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l_channel, a_channel, b_channel = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
@@ -256,67 +260,140 @@ def compose_flattened_label_from_images(images: list[np.ndarray]) -> tuple[np.nd
     }
 
 
-from pydantic import BaseModel, Field
+from backend_api.services.drug_dictionary import validate_drug_name
+
+PARSER_NAME = "adhera_label_parser"
+
+_STRENGTH = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|units?|%)(?:\s*/\s*\d*\.?\d*\s*(?:ml|g))?\b", re.I
+)
+_DIRECTION_START = re.compile(
+    r"^\s*(take|apply|inhale|use|insert|place|instill|chew|dissolve|inject|swallow|give|spray|rub)\b", re.I
+)
+_REFILLS = re.compile(r"\brefills?\b(?:\s*(?:remaining|left))?\s*[:#]?\s*(\d+|no|none)\b", re.I)
+_PRESCRIBER = re.compile(r"\b(?:dr\.?|prescriber|prescribed by|presc)\s*[:.]?\s+([a-z][a-z.' -]{1,40})", re.I)
+_PHARMACY = re.compile(r"pharmacy|cvs|walgreens|rite aid|walmart|costco|kaiser|safeway|kroger|target", re.I)
+_FIELD_LINE = re.compile(
+    r"\b(rx\s*#?|qty|quantity|refills?|dr\.?|prescriber|pharmacy|date|filled|exp|discard|ndc|mfg)\b", re.I
+)
+_FORM_WORDS = re.compile(
+    r"\b(tabs?|tablets?|caps?|capsules?|er|xr|sr|dr|hcl|oral|solution|suspension|cream|ointment)\b", re.I
+)
 
 
-class PrescriptionParseResult(BaseModel):
-    medication_name: str = Field(default="")
-    dosage: str = Field(default="")
-    instructions: str = Field(default="")
-    medication_name_raw: str = Field(default="")
-    medication_name_confidence: str = Field(default="high")
-    medication_name_matched: bool = Field(default=False)
-    medication_name_match_score: float = Field(default=0.0)
-    medication_name_source: str = Field(default="gemini")
-    medication_name_rxcui: Optional[str] = Field(default=None)
-    refills_remaining: str = Field(default="")
-    prescribed_by: str = Field(default="")
-    pharmacy: str = Field(default="")
-    requires_human_review: bool = Field(default=False)
+def _lines(text: str) -> list[str]:
+    seen: set[str] = set()
+    lines = []
+    for raw in text.splitlines():
+        line = " ".join(raw.split())
+        key = line.lower()
+        if line and key not in seen:
+            seen.add(key)
+            lines.append(line)
+    return lines
 
 
-def _call_gemini_ocr(images: list[np.ndarray], device_text: str = "") -> Dict[str, object]:
-    try:
-        import PIL.Image
-        from google import genai
-        from google.genai import types
+def _drug_candidate(line: str) -> str:
+    name = _STRENGTH.sub(" ", line)
+    name = _FORM_WORDS.sub(" ", name)
+    name = re.sub(r"[^A-Za-z -]", " ", name)
+    return " ".join(name.split())
 
-        api_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
-        if not api_key:
-            # Fallback if no API key is provided
-            return PrescriptionParseResult(requires_human_review=True, raw_text=device_text).model_dump()
 
-        client = genai.Client(api_key=api_key)
+def _extract_instructions(lines: list[str]) -> str:
+    for index, line in enumerate(lines):
+        if _DIRECTION_START.match(line):
+            parts = [line]
+            for follow in lines[index + 1 : index + 4]:
+                if (
+                    _FIELD_LINE.search(follow)
+                    or _STRENGTH.search(follow)
+                    and not _DIRECTION_START.match(follow)
+                ):
+                    break
+                parts.append(follow)
+            return " ".join(parts)
+    return ""
 
-        contents = []
-        for img in images:
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            pil_img = PIL.Image.fromarray(rgb)
-            contents.append(pil_img)
 
-        prompt = (
-            "Extract prescription details from these label images. "
-            f"Here is a device-provided OCR hint if helpful: {device_text}. "
-            "Ensure you extract the medication name, dosage, instructions (SIG), refills, pharmacy, and prescriber."
-        )
-        contents.append(prompt)
+def _extract_medication(lines: list[str]) -> tuple[str, str, dict[str, object]]:
+    """Return (raw line, dosage, match) for the most likely drug line.
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=PrescriptionParseResult,
-                temperature=0.0,
-            ),
-        )
-        if response.parsed:
-            return response.parsed.model_dump()
-        else:
-            return PrescriptionParseResult(requires_human_review=True, raw_text=device_text).model_dump()
+    Lines that include a strength are tried first, then other short lines.
+    """
+    with_strength = [line for line in lines if _STRENGTH.search(line) and not _DIRECTION_START.match(line)]
+    others = [
+        line
+        for line in lines
+        if line not in with_strength
+        and not _DIRECTION_START.match(line)
+        and not _FIELD_LINE.search(line)
+        and 3 <= len(line) <= 40
+    ]
+    best: tuple[str, str, dict[str, object]] = ("", "", {})
+    best_score = -1.0
+    for line in (with_strength + others)[:8]:
+        candidate = _drug_candidate(line)
+        if len(candidate) < 3:
+            continue
+        match = validate_drug_name(candidate)
+        score = match.score + (5.0 if line in with_strength else 0.0)
+        if score > best_score:
+            strength = _STRENGTH.search(line)
+            best_score = score
+            best = (
+                candidate,
+                strength.group(0) if strength else "",
+                {
+                    "name": match.snapped_name,
+                    "matched": match.matched,
+                    "score": match.score,
+                    "confidence": match.confidence,
+                    "source": match.source,
+                    "rxcui": match.rxcui or None,
+                },
+            )
+        if match.matched and line in with_strength:
+            break
+    return best
 
-    except Exception as e:
-        return PrescriptionParseResult(requires_human_review=True, raw_text=str(e)).model_dump()
+
+def parse_label_text(text: str) -> Dict[str, object]:
+    """Extract prescription fields from label text recognized on the phone."""
+    lines = _lines(text or "")
+    raw_name, dosage, match = _extract_medication(lines)
+    if not dosage:
+        strength = next((m.group(0) for m in map(_STRENGTH.search, lines) if m), "")
+        dosage = strength
+
+    refills = ""
+    prescriber = ""
+    pharmacy = ""
+    for line in lines:
+        if not refills and (m := _REFILLS.search(line)):
+            refills = "0" if m.group(1).lower() in {"no", "none"} else m.group(1)
+        if not prescriber and (m := _PRESCRIBER.search(line)):
+            prescriber = m.group(1).strip(" .").title()
+        if not pharmacy and _PHARMACY.search(line):
+            pharmacy = line
+
+    instructions = _extract_instructions(lines)
+    matched = bool(match.get("matched"))
+    return {
+        "medication_name": str(match.get("name") or raw_name),
+        "dosage": dosage,
+        "instructions": instructions,
+        "medication_name_raw": raw_name,
+        "medication_name_confidence": str(match.get("confidence") or "low"),
+        "medication_name_matched": matched,
+        "medication_name_match_score": float(match.get("score") or 0.0),
+        "medication_name_source": str(match.get("source") or "none"),
+        "medication_name_rxcui": match.get("rxcui"),
+        "refills_remaining": refills,
+        "prescribed_by": prescriber,
+        "pharmacy": pharmacy,
+        "requires_human_review": not (matched and instructions),
+    }
 
 
 def scan_prescription_label_multi_views(
@@ -332,16 +409,16 @@ def scan_prescription_label_multi_views(
         original = _load_image(image_path)
         oriented = _apply_exif_orientation(image_path, original)
         cropped, _ = _warp_label_region(oriented)
-        normalized = _normalize_for_cloud_ocr(cropped)
+        normalized = _normalize_label_view(cropped)
         normalized_views.append(normalized)
 
-    parsed_dict = _call_gemini_ocr(normalized_views, device_ocr_text or "")
+    parsed_dict = parse_label_text(device_ocr_text or "")
 
     # Generate preview from the first flattened frame
     flattened, _ = _warp_label_region(_apply_exif_orientation(image_paths[0], _load_image(image_paths[0])))
     parsed_dict["label_preview_base64"] = _encode_preview_image(flattened)
     parsed_dict["raw_text"] = device_ocr_text or ""
-    parsed_dict["ocr_provider_chain"] = [device_ocr_provider or "device_hint", "gemini-2.5-flash"]
+    parsed_dict["ocr_provider_chain"] = [device_ocr_provider or "device_ocr", PARSER_NAME]
     parsed_dict["quality_gate"] = _quality_gate(normalized_views[0]) if normalized_views else {}
 
     return parsed_dict

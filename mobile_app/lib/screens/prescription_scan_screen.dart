@@ -359,27 +359,32 @@ class _PrescriptionScanScreenState
     }
   }
 
-  Future<(String?, String?)> _runDeviceOcrHint(File imageFile) async {
+  /// Reads label text on the device from every captured view.
+  ///
+  /// A curved bottle shows different text in each view, so lines from all
+  /// frames are combined (duplicates are removed on the server).
+  Future<(String?, String?)> _runDeviceOcr(List<File> imageFiles) async {
     if (kIsWeb) {
       return (null, null);
     }
-    try {
-      final input = InputImage.fromFilePath(imageFile.path);
-      final recognized = await _textRecognizer.processImage(input);
-      final text = recognized.text.trim();
-      if (text.isEmpty) {
-        return (null, null);
+    final texts = <String>[];
+    for (final imageFile in imageFiles) {
+      try {
+        final input = InputImage.fromFilePath(imageFile.path);
+        final recognized = await _textRecognizer.processImage(input);
+        final text = recognized.text.trim();
+        if (text.isNotEmpty) texts.add(text);
+      } on Exception catch (error, stack) {
+        debugPrint('On-device text recognition failed: $error\n$stack');
       }
-      final provider = defaultTargetPlatform == TargetPlatform.iOS
-          ? 'apple_vision'
-          : 'google_ml_kit';
-      return (text, provider);
-    } on Exception catch (error, stack) {
-      debugPrint(
-        'On-device OCR unavailable; continuing with cloud OCR: $error\n$stack',
-      );
+    }
+    if (texts.isEmpty) {
       return (null, null);
     }
+    final provider = defaultTargetPlatform == TargetPlatform.iOS
+        ? 'apple_vision'
+        : 'google_ml_kit';
+    return (texts.join('\n'), provider);
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -497,14 +502,13 @@ class _PrescriptionScanScreenState
       return;
     }
 
-    final hintFrame = selectedFrames[selectedFrames.length ~/ 2];
-    final (deviceOcrText, deviceOcrProvider) = await _runDeviceOcrHint(
-      hintFrame,
+    final (deviceOcrText, deviceOcrProvider) = await _runDeviceOcr(
+      selectedFrames,
     );
     if (!mounted) return;
     if (!kIsWeb && (deviceOcrText == null || deviceOcrText.trim().isEmpty)) {
       _updateCameraStatus(
-        'On-device OCR found little text. Continuing with cloud OCR.',
+        'Little label text was found. You can enter the details by hand.',
       );
     }
 
@@ -512,7 +516,6 @@ class _PrescriptionScanScreenState
       final result = await repo.scanPrescription(
         userId: userId,
         imageFiles: selectedFrames,
-        // ML Kit text is used as fallback-only server-side metadata now.
         deviceOcrText: deviceOcrText,
         deviceOcrProvider: deviceOcrProvider,
       );

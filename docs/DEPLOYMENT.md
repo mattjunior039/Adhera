@@ -15,7 +15,7 @@ development with SQLite, see the [root README](../README.md#getting-started).
 
 ```bash
 cd backend_api
-cp .env.example .env        # add GEMINI_API_KEY
+cp .env.example .env
 docker compose up --build
 curl http://127.0.0.1:8001/health
 
@@ -45,8 +45,7 @@ one with comments. The most important are:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` / `USE_SQLITE` / `POSTGRES_*` | Database selection. SQLite is the default; `DATABASE_URL` takes priority. |
-| `GEMINI_API_KEY` | Required for prescription label extraction. |
-| `RXNORM_LOOKUP_MODE` | `api`, `local`, or `both` (local file first, then the NIH RxNav API). |
+| `RXNORM_LOOKUP_MODE` | `api`, `local`, or `both` (local file first, then the NIH RxNav API). Use `local` to make no external requests at all. |
 | `PILL_EMBEDDING_DEVICE` | Torch device for DINOv2: `cpu`, `cuda`, or `mps`. |
 | `OFFICIAL_PILL_CHECKPOINT`, `OFFICIAL_COMPARTMENT_CHECKPOINT`, `OFFICIAL_VIDEO_DEVICE` | Video verification models and device. |
 | `PILL_DETECTION_MODEL_PATH` | Loose-pill detector used by `/pills/analyze`. |
@@ -87,3 +86,12 @@ python -m backend_api.scripts.tune_ocr_quality /path/to/label-photos
 - **Migrations:** tables are created at start-up, and newer optional columns are
   added automatically. Use Alembic (`backend_api/alembic/`) for any other schema changes.
 - **Operations:** configure log rotation and disk-usage alerts.
+
+## Project website
+
+The website in `website/` is deployed separately from the backend by
+`.github/workflows/website.yml`. It runs on every push to `main` that changes
+`website/`. To turn it on the first time, open the repository's
+**Settings → Pages** and set **Source** to **GitHub Actions**. The site is then
+published at <https://mattjunior039.github.io/PillBox/>. See
+[website/README.md](../website/README.md) to run it locally.

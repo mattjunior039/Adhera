@@ -2,12 +2,16 @@
 
 **Adhera helps people take the right medication at the right time, and helps their caregivers confirm it.**
 
-Adhera is a cross-platform mobile app with a Python backend. It turns a photo of a
-prescription label into a medication schedule, tracks a physical weekly pillbox,
-and uses computer vision to flag when a pill appears to have been removed. A
-person always reviews the result before anything is recorded.
+**Project website: <https://mattjunior039.github.io/PillBox/>**
 
-> Built for the Congressional App Challenge.
+Adhera pairs a smart weekly pillbox, which has a built-in lid camera, with a
+mobile app and a Python backend that runs on the local network. It turns a photo
+of a prescription label into a medication schedule, tracks what is in each
+compartment, and uses computer vision to flag when a pill appears to have been
+removed. A person always reviews the result before anything is recorded.
+
+> Built for the Congressional App Challenge. This repository contains the app,
+> the backend, the computer-vision models' training code, and the project website.
 
 ---
 
@@ -24,7 +28,7 @@ reviewable evidence without claiming more certainty than the technology supports
 
 | Feature | What the user does | What happens behind the scenes |
 | --- | --- | --- |
-| **Prescription label scanning** | Points the camera at a pill bottle and captures several views. | The phone reads the text on-device (Google ML Kit) and picks the sharpest frames. The backend flattens the curved label with OpenCV, then Google Gemini extracts the drug, strength, and directions as structured data. Drug names are checked against the NIH RxNorm database. |
+| **Prescription label scanning** | Points the camera at a pill bottle and captures several views. | The phone picks the sharpest frames and reads the text on the device (Apple Vision or Google ML Kit). The backend flattens the curved label with OpenCV for the review preview and parses the drug, strength, directions, refills, prescriber, and pharmacy locally. Drug names are checked against the NIH RxNorm database. |
 | **Patient and caregiver review** | Edits and confirms the scanned details; a care-team member approves or rejects them. | Nothing becomes a medication until both steps are complete. Duplicate approvals are blocked. |
 | **Weekly schedule** | Sets which days and times each medication is taken. | The dashboard shows today's doses as pending, taken, or missed. |
 | **Pillbox inventory** | Sees what is in each compartment of a 7-day AM/PM pillbox. | A 14-slot inventory is stored per user. |
@@ -43,21 +47,19 @@ flowchart LR
     end
     subgraph API["FastAPI backend (Python)"]
         Routers[REST API]
-        OCR[Label flattening + Gemini extraction]
+        OCR[Label flattening + local label parser]
         Rx[RxNorm drug-name matching]
         ID[DINOv2 pill identification]
         Video[YOLOv8 pillbox video analysis]
     end
     DB[(SQLite or PostgreSQL)]
-    Gemini[[Google Gemini API]]
     RxNav[[NIH RxNav API]]
 
     UI -- HTTPS / JSON + uploads --> Routers
     MLKit --> UI
     Cam --> UI
     Routers --> DB
-    Routers --> OCR --> Gemini
-    OCR --> Rx --> RxNav
+    Routers --> OCR --> Rx --> RxNav
     Routers --> ID
     Routers --> Video
 ```
@@ -70,15 +72,20 @@ flowchart LR
 | Backend | Python 3.11+, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), Alembic |
 | Database | SQLite for local development, PostgreSQL 15 in Docker |
 | Computer vision | OpenCV, Ultralytics YOLOv8 (detection and segmentation), Meta DINOv2 via PyTorch, NumPy, Pillow |
-| AI and data services | Google Gemini 2.5 Flash (label extraction), NIH RxNorm / RxNav, rapidfuzz |
-| Tooling | Docker Compose, pytest/unittest, flutter_test, flutter_lints, Ruff, ffmpeg (dataset preparation) |
+| Drug data | NIH RxNorm (RxNav API or a local RxNorm file), rapidfuzz for fuzzy name matching |
+| Website | React 19, TypeScript, Vite, Tailwind CSS, Three.js (React Three Fiber), deployed with GitHub Pages |
+| Tooling | Docker Compose, GitHub Actions, pytest/unittest, flutter_test, flutter_lints, Ruff, oxlint, ffmpeg (dataset preparation) |
 
 More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Designed for safety
+## Designed for safety and privacy
 
 Medication software has to be honest about what it knows. Adhera follows these rules:
 
+- **Local processing.** Label photos, pill photos, and pillbox video are
+  processed by the Adhera backend on your own network; images are never sent to
+  an outside service. The only external lookup is the drug *name* sent to NIH
+  RxNorm, and setting `RXNORM_LOOKUP_MODE=local` removes even that.
 - **A person decides.** Vision results are labeled as *candidates* and always
   require review. A video showing a pill being removed does not count as proof
   the dose was taken, and it never changes inventory or adherence records.
@@ -100,7 +107,7 @@ Requires Python 3.11 or newer. From the repository root:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend_api/requirements.txt
-cp backend_api/.env.example backend_api/.env   # add GEMINI_API_KEY to enable label scanning
+cp backend_api/.env.example backend_api/.env
 
 python -m backend_api.scripts.seed_sample_schedule   # create the demo account
 
@@ -169,8 +176,10 @@ reproduce training.
 │   ├── scripts/           Training and support utilities
 │   ├── datasets/          Reference images and lookup data
 │   └── tests/             Backend tests
+├── website/               Project website (React + Vite), published to GitHub Pages
 ├── sample_data/           Development photos and videos
-└── docs/                  Architecture, deployment, and research notes
+├── docs/                  Architecture, deployment, and research notes
+└── .github/workflows/     Website build and deployment
 ```
 
 ## Testing and code quality
@@ -181,13 +190,18 @@ python -m unittest discover -s backend_api/tests
 
 # Mobile app
 cd mobile_app && flutter analyze && flutter test
+
+# Website
+cd website && npm ci && npm run lint && npm run build
 ```
 
-There are 89 backend tests and 38 Flutter tests. They cover login, adherence
-rules, inventory, OCR parsing, RxNorm matching, video-comparison logic, API
+There are 95 backend tests and 38 Flutter tests. They cover login, adherence
+rules, inventory, label parsing (including a full scan with network access
+blocked), RxNorm matching, video-comparison logic, API
 error handling, navigation, the camera workflow (with a simulated camera), and
 the prescription approval flow. Python is formatted and linted with Ruff
-(`backend_api/ruff.toml`); Dart uses `dart format` and `flutter_lints`.
+(`backend_api/ruff.toml`); Dart uses `dart format` and `flutter_lints`; the
+website uses TypeScript and oxlint.
 
 ## Results and limitations
 
@@ -211,15 +225,17 @@ the prescription approval flow. Python is formatted and linted with Ruff
 
 | Document | Contents |
 | --- | --- |
+| [Project website](https://mattjunior039.github.io/PillBox/) | The problem, the smart pillbox, how Adhera works, and the team |
 | [Architecture](docs/ARCHITECTURE.md) | How the app, backend, database, and vision pipelines fit together |
 | [Deployment](docs/DEPLOYMENT.md) | Docker, PostgreSQL, configuration, and production notes |
 | [Vision research](docs/VISION_RESEARCH.md) | Dataset preparation, training, evaluation, and results for the video models |
 | [Mobile app](mobile_app/README.md) | Running on simulators and devices, plus app behavior notes |
 | [Backend scripts](backend_api/scripts/README.md) | Training and support utilities |
+| [Website source](website/README.md) | Running, editing, and deploying the project website |
 | [Sample data](sample_data/README.md) | Development media and dataset rebuilding |
 | [Contributing](CONTRIBUTING.md) | Workflow, checks, and rules for secrets |
 
-## Privacy
+## Keeping data out of the repository
 
 Never commit patient photos or videos, databases, uploads, `.env` files, or
 credentials. All of these are excluded by `.gitignore`.
