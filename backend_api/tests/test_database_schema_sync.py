@@ -1,10 +1,11 @@
 import asyncio
 import unittest
 
-import backend_api.models  # noqa: F401  - register every table on Base.metadata
-from backend_api.database import Base, _add_missing_nullable_columns
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+import backend_api.models  # noqa: F401  - register every table on Base.metadata
+from backend_api.database import Base, _add_missing_nullable_columns
 
 
 class SchemaSyncTests(unittest.TestCase):

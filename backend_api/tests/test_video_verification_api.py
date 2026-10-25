@@ -5,6 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from backend_api.database import Base, get_db
 from backend_api.models.compartment_inventory import CompartmentInventory
 from backend_api.models.dose_verification_event import DoseVerificationEvent
@@ -14,10 +19,6 @@ from backend_api.models.user import User
 from backend_api.routers import dose_verification as route
 from backend_api.services import video_verification_service as service
 from backend_api.services.official_video_detection import compare_target_medications
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def candidate_report(transfer=False):

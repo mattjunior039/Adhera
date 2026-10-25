@@ -5,10 +5,11 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from backend_api.routers import pill_analysis
-from backend_api.services import pill_vision
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+
+from backend_api.routers import pill_analysis
+from backend_api.services import pill_vision
 
 
 def _jpeg() -> bytes:

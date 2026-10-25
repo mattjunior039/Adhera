@@ -102,6 +102,8 @@ source .venv/bin/activate
 pip install -r backend_api/requirements.txt
 cp backend_api/.env.example backend_api/.env   # add GEMINI_API_KEY to enable label scanning
 
+python -m backend_api.scripts.seed_sample_schedule   # create the demo account
+
 cd backend_api
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -123,10 +125,21 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
 For a physical iPhone, use your computer's local network address instead of
-`127.0.0.1`, with both devices on the same Wi-Fi. Create an account on
-the sign-in screen; the backend must be running.
+`127.0.0.1`, with both devices on the same Wi-Fi.
 
-### 3. Optional: vision models
+### 3. Sign in with the demo account
+
+| Email | Password |
+| --- | --- |
+| `adherasample@gmail.com` | `AdheraDemo2026` |
+
+The demo account comes with four medications (ibuprofen, acetaminophen, iron,
+and potassium) on a full weekly schedule. It always opens on a sample
+Wednesday: the morning doses are taken except ibuprofen, which is missed, so
+you can see the dashboard, alerts, and care-team features with realistic data.
+You can also create your own account on the sign-in screen.
+
+### 4. Optional: vision models
 
 Pill identification downloads the DINOv2 model the first time it is used.
 Video verification uses locally trained YOLOv8 checkpoints in
@@ -170,7 +183,7 @@ python -m unittest discover -s backend_api/tests
 cd mobile_app && flutter analyze && flutter test
 ```
 
-There are 87 backend tests and 38 Flutter tests. They cover login, adherence
+There are 89 backend tests and 38 Flutter tests. They cover login, adherence
 rules, inventory, OCR parsing, RxNorm matching, video-comparison logic, API
 error handling, navigation, the camera workflow (with a simulated camera), and
 the prescription approval flow. Python is formatted and linted with Ruff
@@ -184,18 +197,15 @@ the prescription approval flow. Python is formatted and linted with Ruff
   development, so this is a progress check, not a measure of real-world accuracy.
 - The video models support one pillbox layout (seven blue PM compartments) and
   three pills: acetaminophen, ibuprofen, and iron. Iron detection is unreliable.
-- Sign-in does not yet issue tokens, so the API must only run on a trusted
-  network. See the roadmap below.
 
 ## Roadmap
 
-1. Token-based authentication so each user can only access their own data.
-2. Save the prescription review queue and care team on the server, so they
+1. Save the prescription review queue and care team on the server, so they
    persist across devices and restarts.
-3. Push notifications for upcoming and missed doses.
-4. More training data (more sessions, lighting conditions, and "no removal"
+2. Push notifications for upcoming and missed doses.
+3. More training data (more sessions, lighting conditions, and "no removal"
    examples) and automatic detection of the before and after moments.
-5. Database migrations for production deployments.
+4. Database migrations for production deployments.
 
 ## Documentation
 

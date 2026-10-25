@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
+
 from backend_api.scripts.training.evaluate_official_videos import main as evaluate_main
 from backend_api.scripts.training.evaluate_official_videos import summarize
 from backend_api.scripts.training.official_compartments import prepare

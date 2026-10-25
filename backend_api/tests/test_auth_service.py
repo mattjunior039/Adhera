@@ -3,13 +3,14 @@ import os
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from backend_api.database import Base
 from backend_api.models.user import User
 from backend_api.routers.auth import LoginRequest, login
 from backend_api.schemas.user import UserCreate
 from backend_api.services.user_service import create_user
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class AuthFlowTests(unittest.TestCase):

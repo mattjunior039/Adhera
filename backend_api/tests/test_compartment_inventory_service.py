@@ -1,6 +1,9 @@
 import asyncio
 import unittest
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from backend_api.database import Base
 from backend_api.models.compartment_inventory import CompartmentInventory
 from backend_api.models.medication import Medication
@@ -15,8 +18,6 @@ from backend_api.services.compartment_inventory_service import (
     initialize_test_inventory,
     update_inventory_slot,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 class CompartmentInventorySeedTests(unittest.TestCase):

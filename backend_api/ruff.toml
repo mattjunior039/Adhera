@@ -6,4 +6,5 @@ extend-exclude = ["venv", "runs", "uploads", "alembic/versions"]
 select = ["E9", "F", "I"]
 
 [lint.isort]
+known-first-party = ["backend_api"]
 known-third-party = ["alembic"]

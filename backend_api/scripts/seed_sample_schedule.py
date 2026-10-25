@@ -1,4 +1,4 @@
-"""Explicitly seed demo schedules for the existing Adhera sample account."""
+"""Create the Adhera demo account and fill it with a sample week of medications and schedules."""
 
 import argparse
 import asyncio
@@ -6,6 +6,11 @@ import random
 import re
 from datetime import time
 
+from sqlalchemy import delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from backend_api.config import get_database_url
+from backend_api.database import Base
 from backend_api.models import (
     CompartmentInventory,
     DoseOutcome,
@@ -17,10 +22,12 @@ from backend_api.models import (
     Schedule,
     User,
 )
-from sqlalchemy import delete, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from backend_api.services.user_service import hash_password, verify_password
 
 EMAIL = "adherasample@gmail.com"
+FULL_NAME = "Adhera Test"
+# Public demo credential, documented in the README for reviewers.
+DEMO_PASSWORD = "AdheraDemo2026"
 DEMO_PREFIX = "DEMO ONLY:"
 DAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 NAMES = ("Ibuprofen", "Acetaminophen", "Iron", "Potassium")
@@ -50,8 +57,14 @@ def sample_entries() -> list[tuple[str, time, str, int]]:
 
 async def seed_sample_schedule(db: AsyncSession, *, reset_sample_data: bool = False) -> int:
     user = (await db.execute(select(User).where(User.email == EMAIL))).scalar_one_or_none()
-    if user is None or user.full_name != "Adhera Test":
-        raise ValueError("Create the Adhera Test sample account first; no other account will be modified")
+    if user is None:
+        user = User(email=EMAIL, full_name=FULL_NAME, password_hash=hash_password(DEMO_PASSWORD))
+        db.add(user)
+        await db.flush()
+    elif user.full_name != FULL_NAME:
+        raise ValueError(f"{EMAIL} is not the {FULL_NAME} demo account; it will not be modified")
+    elif not verify_password(DEMO_PASSWORD, user.password_hash or ""):
+        user.password_hash = hash_password(DEMO_PASSWORD)
     if reset_sample_data:
         photos = select(PhotoEvent.id).where(PhotoEvent.user_id == user.id)
         await db.execute(
@@ -126,20 +139,26 @@ async def seed_sample_schedule(db: AsyncSession, *, reset_sample_data: bool = Fa
 async def main(database_url: str, reset_sample_data: bool) -> None:
     engine = create_async_engine(database_url)
     try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
         async with async_sessionmaker(engine)() as db, db.begin():
             count = await seed_sample_schedule(db, reset_sample_data=reset_sample_data)
-        print(f"Saved {count} demo schedule entries for Adhera Test (AM 08:00, PM 18:00).")
+        print(f"Saved {count} demo schedule entries. Sign in as {EMAIL} / {DEMO_PASSWORD}")
     finally:
         await engine.dispose()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database-url", required=True, help="Explicit database target; never inferred")
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Database to seed (default: the backend's configured database)",
+    )
     parser.add_argument(
         "--reset-sample-data",
         action="store_true",
         help="Delete only this sample account's old account data; keep its profile",
     )
     args = parser.parse_args()
-    asyncio.run(main(args.database_url, args.reset_sample_data))
+    asyncio.run(main(args.database_url or get_database_url(), args.reset_sample_data))

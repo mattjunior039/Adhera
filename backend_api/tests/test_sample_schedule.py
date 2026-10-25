@@ -1,10 +1,14 @@
 import unittest
 from datetime import time
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from backend_api.database import Base
 from backend_api.models import DoseOutcome, Medication, Schedule, User
 from backend_api.scripts.seed_sample_schedule import (
     DAYS,
+    DEMO_PASSWORD,
     EMAIL,
     NAMES,
     PM_COUNTS,
@@ -12,8 +16,7 @@ from backend_api.scripts.seed_sample_schedule import (
     seed_sample_schedule,
 )
 from backend_api.services.compartment_inventory_service import initialize_test_inventory
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from backend_api.services.user_service import hash_password, verify_password
 
 
 class SampleScheduleTests(unittest.IsolatedAsyncioTestCase):
@@ -101,16 +104,38 @@ class SampleScheduleTests(unittest.IsolatedAsyncioTestCase):
             after_inventory = list((await db.execute(select(Schedule))).scalars())
             self.assertEqual(len(after_inventory), 55)
 
-    async def test_missing_sample_user_is_not_created(self):
+    async def test_missing_sample_user_is_created_with_demo_password(self):
         async with self.sessions() as db:
-            with self.assertRaisesRegex(ValueError, "sample account first"):
+            self.assertEqual(await seed_sample_schedule(db), 53)
+            await db.commit()
+            user = (await db.execute(select(User).where(User.email == EMAIL))).scalar_one()
+            self.assertEqual(user.full_name, "Adhera Test")
+            self.assertTrue(verify_password(DEMO_PASSWORD, user.password_hash))
+
+    async def test_existing_sample_user_gets_published_demo_password(self):
+        async with self.sessions() as db:
+            db.add(User(email=EMAIL, full_name="Adhera Test", password_hash=hash_password("old-password")))
+            await db.commit()
+            await seed_sample_schedule(db)
+            await db.commit()
+            user = (await db.execute(select(User).where(User.email == EMAIL))).scalar_one()
+            self.assertTrue(verify_password(DEMO_PASSWORD, user.password_hash))
+
+    async def test_other_account_with_demo_email_is_not_modified(self):
+        async with self.sessions() as db:
+            db.add(User(email=EMAIL, full_name="Someone Else", password_hash="theirs"))
+            await db.commit()
+            with self.assertRaisesRegex(ValueError, "not the Adhera Test demo account"):
                 await seed_sample_schedule(db)
             self.assertEqual(list((await db.execute(select(Medication))).scalars()), [])
 
     async def test_explicit_reset_clears_sample_history_and_preserves_other_account(self):
         async with self.sessions() as db:
             user = User(
-                email=EMAIL, full_name="Adhera Test", password_hash="keep-this-hash", phone="00000000000000"
+                email=EMAIL,
+                full_name="Adhera Test",
+                password_hash=hash_password(DEMO_PASSWORD),
+                phone="00000000000000",
             )
             other = User(email="other@example.com", full_name="Other")
             db.add_all([user, other])
@@ -137,7 +162,7 @@ class SampleScheduleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(list((await db.execute(select(DoseOutcome))).scalars()), [])
             self.assertEqual(len(list((await db.execute(select(Schedule))).scalars())), 53)
             saved = await db.get(User, user.id)
-            self.assertEqual(saved.password_hash, "keep-this-hash")
+            self.assertTrue(verify_password(DEMO_PASSWORD, saved.password_hash))
             self.assertEqual(saved.phone, "00000000000000")
             self.assertIsNotNone(await db.get(Medication, other_med.id))
 

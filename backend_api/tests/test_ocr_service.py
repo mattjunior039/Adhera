@@ -4,6 +4,7 @@ import unittest
 
 import cv2
 import numpy as np
+
 from backend_api.services.ocr_service import (
     _warp_label_region,
     compose_flattened_label_from_images,

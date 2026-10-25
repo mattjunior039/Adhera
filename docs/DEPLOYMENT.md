@@ -18,6 +18,9 @@ cd backend_api
 cp .env.example .env        # add GEMINI_API_KEY
 docker compose up --build
 curl http://127.0.0.1:8001/health
+
+# Create the demo account (adherasample@gmail.com / AdheraDemo2026)
+docker compose exec api python -m backend_api.scripts.seed_sample_schedule
 ```
 
 The API container is published on port 8001 so it never collides with a native
@@ -74,9 +77,6 @@ python -m backend_api.scripts.tune_ocr_quality /path/to/label-photos
 
 ## Before a production deployment
 
-- **Authentication:** sign-in does not issue tokens yet, and endpoints accept a
-  `user_id` in the path. Add token-based authentication before exposing the API
-  beyond a trusted network.
 - **HTTPS and CORS:** serve the API over HTTPS, and replace the wildcard CORS
   setting in `main.py` with your app's origins.
 - **Request limits:** video uploads are capped at 50 MiB in code. Also enforce

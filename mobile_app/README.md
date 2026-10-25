@@ -47,7 +47,8 @@ flutter run -d <iphone-device-id> --dart-define=API_BASE_URL=http://<mac-lan-ip>
   an alert. Instructions and Undo remain available.
 - **Verification:** photo and video verification are not quick actions on the
   dashboard. Their screens and the verification history are still available.
-- **Sample profile:** the demo account always shows a Wednesday. Its AM doses
+- **Sample profile:** the demo account (`adherasample@gmail.com` / `AdheraDemo2026`,
+  created by `seed_sample_schedule`) always shows a Wednesday. Its AM doses
   start as taken except ibuprofen, which starts missed and appears in Home and
   Alerts. Changes to the demo stay in the current session and never create real
   adherence records. Other accounts use the real weekday and backend data.
