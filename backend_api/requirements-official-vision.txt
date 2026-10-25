@@ -1,0 +1,2 @@
+# Isolated experimental detector; does not need the API/cloud dependencies.
+ultralytics>=8.3,<9

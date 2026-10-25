@@ -29,22 +29,3 @@ def get_database_url() -> str:
     port = os.getenv("POSTGRES_PORT", "5432")
     db_name = os.getenv("POSTGRES_DB", "pillbox")
     return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}"
-
-
-@lru_cache(maxsize=1)
-def get_sync_database_url() -> str:
-    """Return the sync database URL suitable for Alembic."""
-    database_url = os.getenv("SYNC_DATABASE_URL")
-    if database_url:
-        return database_url
-
-    if os.getenv("USE_SQLITE", "true").lower() in {"1", "true", "yes", "y"}:
-        sqlite_path = Path(__file__).resolve().parent / "pillbox.db"
-        return f"sqlite+aiosqlite:///{sqlite_path}"
-
-    user = os.getenv("POSTGRES_USER", "pillbox_user")
-    password = os.getenv("POSTGRES_PASSWORD", "pillbox_password")
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    db_name = os.getenv("POSTGRES_DB", "pillbox")
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db_name}"

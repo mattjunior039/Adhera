@@ -1,15 +1,21 @@
+# Python and tooling caches
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.swp
-*.sqlite3
-*.db
+*.py[cod]
 .pytest_cache/
+.ruff_cache/
 .venv/
 venv/
+
+# Local data, credentials, and secrets never belong in the image
+.env
+secrets/
+*.db
+*.sqlite3
+*.log
+uploads/
+/runs/
+
+# Not needed at runtime
 .git/
 .gitignore
-.env
-uploads/
-*.log
+/tests/

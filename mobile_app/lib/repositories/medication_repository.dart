@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'api_service.dart';
-import 'app_config.dart';
-import 'models/medication.dart';
-import 'models/schedule.dart';
-import 'models/user.dart';
+import '../app_config.dart';
+import '../models/medication.dart';
+import '../models/schedule.dart';
+import '../models/user.dart';
+import '../services/api_service.dart';
+
+export '../services/api_service.dart' show apiServiceProvider;
 
 class MedicationRepository {
   MedicationRepository(this._apiService);
@@ -19,11 +21,8 @@ class MedicationRepository {
   }) async {
     final response = await _apiService.post<Map<String, dynamic>>(
       '/users',
-      data: UserCreate(
-        email: email,
-        fullName: fullName,
-        phone: phone,
-      ).toJson()..addAll({'password': password}),
+      data: UserCreate(email: email, fullName: fullName, phone: phone).toJson()
+        ..addAll({'password': password}),
     );
 
     if (response.data == null) {
@@ -39,10 +38,7 @@ class MedicationRepository {
   }) async {
     final response = await _apiService.post<Map<String, dynamic>>(
       '/auth/login',
-      data: {
-        'email': email,
-        'password': password,
-      },
+      data: {'email': email, 'password': password},
     );
 
     if (response.data == null) {
@@ -52,7 +48,9 @@ class MedicationRepository {
     final data = response.data!;
     final userMap = data['user'] ?? data;
     if (userMap is! Map<String, dynamic>) {
-      throw const FormatException('Login response did not include a user object');
+      throw const FormatException(
+        'Login response did not include a user object',
+      );
     }
 
     if (userMap.containsKey('user_id') && !userMap.containsKey('id')) {
@@ -65,22 +63,6 @@ class MedicationRepository {
     }
 
     return User.fromJson(userMap);
-  }
-
-  Future<User> getUserById(int userId) async {
-    final response = await _apiService.get<Map<String, dynamic>>('/users/$userId');
-    if (response.data == null) {
-      throw const FormatException('User response was empty');
-    }
-    return User.fromJson(response.data!);
-  }
-
-  Future<User> getUserByEmail(String email) async {
-    final response = await _apiService.get<Map<String, dynamic>>('/users/by-email/${Uri.encodeComponent(email)}');
-    if (response.data == null) {
-      throw const FormatException('User response was empty');
-    }
-    return User.fromJson(response.data!);
   }
 
   Future<Medication> createMedication({
@@ -107,7 +89,9 @@ class MedicationRepository {
   }
 
   Future<List<Medication>> getMedicationsForUser(int userId) async {
-    final response = await _apiService.get<List<dynamic>>('/medications/$userId');
+    final response = await _apiService.get<List<dynamic>>(
+      '/medications/$userId',
+    );
     final items = response.data ?? const <dynamic>[];
     return items
         .map((item) => Medication.fromJson(item as Map<String, dynamic>))
@@ -124,12 +108,13 @@ class MedicationRepository {
       '/medications/$medicationId',
       data: {'name': name, 'dosage': dosage, 'instructions': instructions},
     );
-    if (response.data == null) throw const FormatException('Update response was empty');
+    if (response.data == null) {
+      throw const FormatException('Update response was empty');
+    }
     return Medication.fromJson(response.data!);
   }
 
   /// Log a manual dose outcome (taken/missed/unknown) against a schedule slot.
-  /// Fire-and-forget safe: callers should silently swallow errors.
   Future<void> logDose({
     required int userId,
     required int scheduleId,
@@ -152,13 +137,15 @@ class MedicationRepository {
   /// Returns a map of scheduleId → status for today's logged outcomes.
   /// Returns empty map if the backend is unreachable.
   Future<Map<int, String>> getTodayAdherence(int userId) async {
-    final response = await _apiService.get<List<dynamic>>('/adherence/today/$userId');
+    final response = await _apiService.get<List<dynamic>>(
+      '/adherence/today/$userId',
+    );
     final items = response.data ?? const <dynamic>[];
     final result = <int, String>{};
     for (final item in items) {
       if (item is Map<String, dynamic>) {
         final sid = item['schedule_id'] as int?;
-        final st  = item['status'] as String?;
+        final st = item['status'] as String?;
         if (sid != null && st != null) result[sid] = st;
       }
     }
@@ -199,19 +186,23 @@ class MedicationRepository {
   }
 }
 
-final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
-
 final medicationRepositoryProvider = Provider<MedicationRepository>((ref) {
   final apiService = ref.watch(apiServiceProvider);
   return MedicationRepository(apiService);
 });
 
-final medicationsByUserProvider = FutureProvider.family<List<Medication>, int>((ref, userId) async {
+final medicationsByUserProvider = FutureProvider.family<List<Medication>, int>((
+  ref,
+  userId,
+) async {
   final repo = ref.watch(medicationRepositoryProvider);
   return repo.getMedicationsForUser(userId);
 });
 
-final scheduleByUserProvider = FutureProvider.family<List<Schedule>, int>((ref, userId) async {
+final scheduleByUserProvider = FutureProvider.family<List<Schedule>, int>((
+  ref,
+  userId,
+) async {
   final repo = ref.watch(medicationRepositoryProvider);
   return repo.getScheduleForUser(userId);
 });
@@ -225,7 +216,9 @@ class CurrentUserNotifier extends Notifier<User?> {
   void clear() => state = null;
 }
 
-final currentUserProvider = NotifierProvider<CurrentUserNotifier, User?>(() => CurrentUserNotifier());
+final currentUserProvider = NotifierProvider<CurrentUserNotifier, User?>(
+  () => CurrentUserNotifier(),
+);
 
 class UserIdNotifier extends Notifier<int> {
   @override
@@ -241,5 +234,9 @@ class UserEmailNotifier extends Notifier<String> {
   void setUserEmail(String email) => state = email;
 }
 
-final userIdProvider = NotifierProvider<UserIdNotifier, int>(() => UserIdNotifier());
-final userEmailProvider = NotifierProvider<UserEmailNotifier, String>(() => UserEmailNotifier());
+final userIdProvider = NotifierProvider<UserIdNotifier, int>(
+  () => UserIdNotifier(),
+);
+final userEmailProvider = NotifierProvider<UserEmailNotifier, String>(
+  () => UserEmailNotifier(),
+);

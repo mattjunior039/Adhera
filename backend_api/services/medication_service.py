@@ -3,12 +3,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.models.medication import Medication
-    from backend_api.schemas.medication import MedicationCreate, MedicationUpdate
-except ImportError:  # pragma: no cover - script execution fallback
-    from models.medication import Medication
-    from schemas.medication import MedicationCreate, MedicationUpdate
+from backend_api.models.medication import Medication
+from backend_api.schemas.medication import MedicationCreate, MedicationUpdate
 
 
 async def create_medication(db: AsyncSession, medication_in: MedicationCreate) -> Medication:
@@ -19,7 +15,9 @@ async def create_medication(db: AsyncSession, medication_in: MedicationCreate) -
     return medication
 
 
-async def update_medication(db: AsyncSession, medication_id: int, data: MedicationUpdate) -> Optional[Medication]:
+async def update_medication(
+    db: AsyncSession, medication_id: int, data: MedicationUpdate
+) -> Optional[Medication]:
     medication = await db.get(Medication, medication_id)
     if medication is None:
         return None

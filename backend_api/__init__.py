@@ -1,1 +1,1 @@
-"""Pillbox medication management backend package."""
+"""Adhera medication management backend package."""

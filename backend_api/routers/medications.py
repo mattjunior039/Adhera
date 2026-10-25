@@ -1,20 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.database import get_db
-    from backend_api.schemas.medication import MedicationCreate, MedicationResponse, MedicationUpdate
-    from backend_api.services.medication_service import create_medication, get_user_medications, update_medication
-except ImportError:  # pragma: no cover - script execution fallback
-    from database import get_db
-    from schemas.medication import MedicationCreate, MedicationResponse, MedicationUpdate
-    from services.medication_service import create_medication, get_user_medications, update_medication
+from backend_api.database import get_db
+from backend_api.schemas.medication import (
+    MedicationCreate,
+    MedicationResponse,
+    MedicationUpdate,
+)
+from backend_api.services.medication_service import (
+    create_medication,
+    get_user_medications,
+    update_medication,
+)
 
 router = APIRouter(prefix="", tags=["medications"])
 
 
 @router.post("/medications", response_model=MedicationResponse, status_code=status.HTTP_201_CREATED)
-async def add_medication(medication: MedicationCreate, db: AsyncSession = Depends(get_db)) -> MedicationResponse:
+async def add_medication(
+    medication: MedicationCreate, db: AsyncSession = Depends(get_db)
+) -> MedicationResponse:
     try:
         created = await create_medication(db, medication)
         return MedicationResponse.model_validate(created)

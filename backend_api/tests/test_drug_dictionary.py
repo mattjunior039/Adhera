@@ -3,10 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-try:
-    import backend_api.services.drug_dictionary as drug_dictionary
-except ImportError:
-    import services.drug_dictionary as drug_dictionary
+import backend_api.services.drug_dictionary as drug_dictionary
 
 
 class DrugDictionaryGuardrailTests(unittest.TestCase):

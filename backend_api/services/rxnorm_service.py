@@ -31,11 +31,13 @@ def _extract_name_items(payload: object) -> List[Dict[str, str]]:
             if isinstance(name, str) and name.strip():
                 rxcui = node.get("rxcui")
                 tty_raw = node.get("tty") or node.get("term_type")
-                items.append({
-                    "name": name.strip(),
-                    "rxcui": str(rxcui).strip() if rxcui is not None else "",
-                    "tty": str(tty_raw).strip().upper() if tty_raw is not None else "",
-                })
+                items.append(
+                    {
+                        "name": name.strip(),
+                        "rxcui": str(rxcui).strip() if rxcui is not None else "",
+                        "tty": str(tty_raw).strip().upper() if tty_raw is not None else "",
+                    }
+                )
             for value in node.values():
                 walk(value)
             return
@@ -119,7 +121,7 @@ def api_rxnorm_match(term: str, threshold: float = 85.0) -> Optional[Dict[str, o
     except Exception:
         return None
 
-    candidates = ((payload.get("approximateGroup") or {}).get("candidate") or [])
+    candidates = (payload.get("approximateGroup") or {}).get("candidate") or []
     best: Optional[Dict[str, object]] = None
     best_score = 0.0
 
@@ -135,7 +137,7 @@ def api_rxnorm_match(term: str, threshold: float = 85.0) -> Optional[Dict[str, o
                 properties = client.get(f"{RXNORM_API_BASE}/rxcui/{rxcui}/properties.json")
                 properties.raise_for_status()
                 body = properties.json()
-            prop = (body.get("properties") or {})
+            prop = body.get("properties") or {}
             if isinstance(prop.get("name"), str) and prop["name"].strip():
                 canonical = prop["name"].strip()
             tty = str(prop.get("tty") or "").strip().upper()
@@ -145,9 +147,7 @@ def api_rxnorm_match(term: str, threshold: float = 85.0) -> Optional[Dict[str, o
         if tty and tty not in allowed_ttys:
             continue
 
-        similarity_score = (
-            JaroWinkler.normalized_similarity(cleaned.lower(), canonical.lower()) * 100.0
-        )
+        similarity_score = JaroWinkler.normalized_similarity(cleaned.lower(), canonical.lower()) * 100.0
         if similarity_score > best_score:
             best_score = similarity_score
             best = {

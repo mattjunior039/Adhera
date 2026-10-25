@@ -21,27 +21,23 @@ class User {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'email': email,
-        'full_name': fullName,
-        'phone': phone,
-      };
+    'id': id,
+    'email': email,
+    'full_name': fullName,
+    'phone': phone,
+  };
 }
 
 class UserCreate {
-  const UserCreate({
-    required this.email,
-    required this.fullName,
-    this.phone,
-  });
+  const UserCreate({required this.email, required this.fullName, this.phone});
 
   final String email;
   final String fullName;
   final String? phone;
 
   Map<String, dynamic> toJson() => {
-        'email': email,
-        'full_name': fullName,
-        'phone': phone,
-      };
+    'email': email,
+    'full_name': fullName,
+    'phone': phone,
+  };
 }

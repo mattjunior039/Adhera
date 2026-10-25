@@ -1,1 +1,1 @@
-"""Service layer for the Pillbox backend."""
+"""Service layer for the Adhera backend."""

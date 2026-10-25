@@ -6,6 +6,7 @@ Thumbs.db
 
 # Root local virtual envs
 .venv/
+.venv-vision/
 venv/
 
 # Python cache and tooling
@@ -21,16 +22,19 @@ backend_api/*.db
 backend_api/*.sqlite3
 backend_api/pillbox.db
 backend_api/postgres_log.txt
+backend_api/runs/
 backend_api/uploads/**
 !backend_api/uploads/.gitkeep
 backend_api/venv/
 backend_api/.venv/
 
 # Backend secrets and local datasets
-backend_api/secrets/*.json
-!backend_api/secrets/*.example.json
-!backend_api/secrets/.gitkeep
+backend_api/secrets/
 backend_api/datasets/rxnorm_names.json
+
+# Generated training datasets (rebuild with sample_data/build_dataset.py)
+sample_data/yolo_dataset/
+sample_data/yolo_dataset_raw/
 
 # Flutter and Dart generated files
 mobile_app/.dart_tool/

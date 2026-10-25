@@ -6,20 +6,18 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.database import get_db
-    from backend_api.models.photo_event import PhotoEvent
-    from backend_api.schemas.inference_result import AnalyzePhotoRequest, InferenceResultResponse
-    from backend_api.schemas.photo_event import PhotoEventCreate, PhotoEventResponse
-    from backend_api.services.inference_service import analyze_photo_event
-    from backend_api.services.photo_event_service import create_photo_event, get_user_photo_events
-except ImportError:  # pragma: no cover - script execution fallback
-    from database import get_db
-    from models.photo_event import PhotoEvent
-    from schemas.inference_result import AnalyzePhotoRequest, InferenceResultResponse
-    from schemas.photo_event import PhotoEventCreate, PhotoEventResponse
-    from services.inference_service import analyze_photo_event
-    from services.photo_event_service import create_photo_event, get_user_photo_events
+from backend_api.database import get_db
+from backend_api.models.photo_event import PhotoEvent
+from backend_api.schemas.inference_result import (
+    AnalyzePhotoRequest,
+    InferenceResultResponse,
+)
+from backend_api.schemas.photo_event import PhotoEventCreate, PhotoEventResponse
+from backend_api.services.inference_service import analyze_photo_event
+from backend_api.services.photo_event_service import (
+    create_photo_event,
+    get_user_photo_events,
+)
 
 router = APIRouter(prefix="", tags=["photo-events"])
 
@@ -51,9 +49,11 @@ async def upload_photo(
         extension = Path(file.filename).suffix or ".jpg"
         unique_name = f"{uuid4()}_{int(datetime.now(timezone.utc).timestamp())}{extension}"
         save_path = UPLOAD_DIR / unique_name
-        await save_path.write_bytes(file_bytes)
+        save_path.write_bytes(file_bytes)
     except OSError as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to write image file: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to write image file: {exc}"
+        ) from exc
 
     try:
         photo_event = PhotoEvent(
@@ -68,7 +68,9 @@ async def upload_photo(
         await db.refresh(photo_event)
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to save photo event: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to save photo event: {exc}"
+        ) from exc
 
     return {
         "photo_event_id": photo_event.id,
@@ -94,7 +96,9 @@ async def analyze_photo_event_route(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Analysis failed: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Analysis failed: {exc}"
+        ) from exc
 
     return [InferenceResultResponse.model_validate(result) for result in results]
 
@@ -102,33 +106,43 @@ async def analyze_photo_event_route(
 @router.post("/prescriptions/scan")
 async def scan_prescription(
     user_id: int = Form(...),
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     device_ocr_text: Optional[str] = Form(default=None),
     device_ocr_provider: Optional[str] = Form(default=None),
 ) -> dict:
-    """Upload a prescription label and return extracted medication details.
+    """Upload multi-view prescription keyframes and return fused medication details."""
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No images provided.")
 
-    OCR strategy is hybrid in this order:
-    1) automatic label-region flattening and crop, then Google Cloud Vision document OCR
-    2) fallback to optional device hint text only on cloud outage/quota/timeout
-    3) Tesseract fallback when cloud is unavailable and no device hint is usable
-    """
-    file_bytes = await file.read()
-    extension = Path(file.filename or "label").suffix or ".jpg"
-    tmp_path = UPLOAD_DIR / f"scan_{uuid4().hex}{extension}"
-    tmp_path.write_bytes(file_bytes)
-
+    temporary_paths: list[Path] = []
     try:
-        try:
-            from backend_api.services.ocr_service import scan_prescription_label
-        except ImportError:
-            from services.ocr_service import scan_prescription_label
+        from backend_api.services.ocr_service import scan_prescription_label_multi_views
 
-        result = scan_prescription_label(
-            tmp_path,
+        for index, upload in enumerate(files):
+            content = await upload.read()
+            if not content:
+                continue
+            extension = Path(upload.filename or ".jpg").suffix or ".jpg"
+            path = UPLOAD_DIR / f"scan_{uuid4().hex}_view_{index + 1}{extension}"
+            path.write_bytes(content)
+            temporary_paths.append(path)
+
+        if not temporary_paths:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No readable image files were provided.",
+            )
+
+        result = scan_prescription_label_multi_views(
+            temporary_paths,
             device_ocr_text=device_ocr_text,
             device_ocr_provider=device_ocr_provider,
         )
+        label_region = result.get("label_region")
+        if not isinstance(label_region, dict):
+            label_region = {}
+            result["label_region"] = label_region
+        label_region["views_received"] = len(files)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
@@ -137,7 +151,8 @@ async def scan_prescription(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     finally:
-        tmp_path.unlink(missing_ok=True)
+        for path in temporary_paths:
+            path.unlink(missing_ok=True)
 
     return result
 
@@ -158,12 +173,12 @@ async def prepare_prescription_label(
     tmp_path.write_bytes(file_bytes)
 
     try:
-        try:
-            from backend_api.services.ocr_service import _warp_label_region, _encode_preview_image
-        except ImportError:
-            from services.ocr_service import _warp_label_region, _encode_preview_image
-
         import cv2
+
+        from backend_api.services.ocr_service import (
+            _encode_preview_image,
+            _warp_label_region,
+        )
 
         source = cv2.imread(str(tmp_path))
         if source is None:
@@ -173,7 +188,9 @@ async def prepare_prescription_label(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Label preparation failed: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Label preparation failed: {exc}"
+        ) from exc
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -191,16 +208,18 @@ async def prepare_prescription_label_multi(
 ) -> dict:
     """Return a single flattened label crop composed from multiple frames."""
     if not files:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least one image file is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="At least one image file is required"
+        )
 
     try:
-        try:
-            from backend_api.services.ocr_service import compose_flattened_label_from_images, _encode_preview_image
-        except ImportError:
-            from services.ocr_service import compose_flattened_label_from_images, _encode_preview_image
-
         import cv2
         import numpy as np
+
+        from backend_api.services.ocr_service import (
+            _encode_preview_image,
+            compose_flattened_label_from_images,
+        )
 
         images = []
         for upload in files:
@@ -220,7 +239,9 @@ async def prepare_prescription_label_multi(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Label composition failed: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Label composition failed: {exc}"
+        ) from exc
 
     return {
         "user_id": user_id,

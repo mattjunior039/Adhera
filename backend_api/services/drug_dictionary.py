@@ -1,19 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from rapidfuzz.distance import JaroWinkler
 
-try:
-    from backend_api.services.rxnorm_service import resolve_rxnorm
-except ImportError:
-    from services.rxnorm_service import resolve_rxnorm
-
+from backend_api.services.rxnorm_service import resolve_rxnorm
 
 KNOWN_DRUG_NAMES: List[str] = [
-    "Fukitol",
     "Metformin",
     "Lisinopril",
     "Levothyroxine",

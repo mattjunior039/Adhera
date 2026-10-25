@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.database import get_db
-    from backend_api.schemas.dose_outcome import DoseOutcomeResponse, LogDoseRequest
-    from backend_api.services.adherence_service import evaluate_from_photos, get_today_outcomes, log_dose
-except ImportError:  # pragma: no cover
-    from database import get_db
-    from schemas.dose_outcome import DoseOutcomeResponse, LogDoseRequest
-    from services.adherence_service import evaluate_from_photos, get_today_outcomes, log_dose
+from backend_api.database import get_db
+from backend_api.schemas.dose_outcome import DoseOutcomeResponse, LogDoseRequest
+from backend_api.services.adherence_service import (
+    evaluate_from_photos,
+    get_today_outcomes,
+    log_dose,
+)
 
 router = APIRouter(prefix="/adherence", tags=["adherence"])
 
@@ -37,9 +36,7 @@ async def get_today(user_id: int, db: AsyncSession = Depends(get_db)) -> list[Do
 
 
 @router.post("/evaluate/{user_id}", response_model=list[DoseOutcomeResponse])
-async def evaluate_adherence(
-    user_id: int, db: AsyncSession = Depends(get_db)
-) -> list[DoseOutcomeResponse]:
+async def evaluate_adherence(user_id: int, db: AsyncSession = Depends(get_db)) -> list[DoseOutcomeResponse]:
     """Auto-evaluate today's adherence from uploaded photo-event inference results."""
     outcomes = await evaluate_from_photos(db, user_id)
     return [DoseOutcomeResponse.model_validate(o) for o in outcomes]

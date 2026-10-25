@@ -1,36 +1,72 @@
+"""Adhera API entry point.
+
+Run from the repository root with ``uvicorn backend_api.main:app`` or from this
+folder with ``uvicorn main:app``.
+"""
+
+import logging
+import os
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 if __package__ in (None, ""):
+    # Allow ``uvicorn main:app`` from inside backend_api/.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-try:
-    from backend_api.database import init_db
-    from backend_api.routers.adherence import router as adherence_router
-    from backend_api.routers.auth import router as auth_router
-    from backend_api.routers.medications import router as medications_router
-    from backend_api.routers.photo_events import router as photo_events_router
-    from backend_api.routers.schedules import router as schedules_router
-    from backend_api.routers.users import router as users_router
-    # Import models so init_db creates all tables including new ones
-    import backend_api.models.dose_outcome  # noqa: F401
-except ImportError:  # pragma: no cover - script execution fallback
-    from database import init_db
-    from routers.adherence import router as adherence_router
-    from routers.auth import router as auth_router
-    from routers.medications import router as medications_router
-    from routers.photo_events import router as photo_events_router
-    from routers.schedules import router as schedules_router
-    from routers.users import router as users_router
-    import models.dose_outcome  # noqa: F401
+from backend_api.database import init_db
+from backend_api.routers import (
+    adherence,
+    auth,
+    dose_verification,
+    medications,
+    photo_events,
+    pill_analysis,
+    pillbox,
+    schedules,
+    users,
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def _preload_pill_models() -> None:
+    try:
+        from backend_api.services import pill_identity, pill_vision
+    except ImportError as exc:
+        logger.warning("Pill model preload skipped because dependencies are unavailable: %s", exc)
+        return
+
+    # Never let a missing checkpoint or absent ML extra stop the API from booting.
+    for module in (pill_vision, pill_identity):
+        try:
+            await run_in_threadpool(module.preload)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pill model preload skipped for %s: %s", module.__name__, exc)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    await init_db()
+    # Off by default: models otherwise load lazily on first use.
+    if os.getenv("PRELOAD_PILL_MODELS", "false").lower() in {"1", "true", "yes", "y"}:
+        await _preload_pill_models()
+    yield
+
 
 app = FastAPI(
-    title="Pillbox Medication Management API",
+    title="Adhera Medication Management API",
     version="1.0.0",
-    description="Medication tracking backend that records users, medications, schedules, and photo-based interactions.",
+    description=(
+        "Medication adherence backend: users, medications, schedules, prescription "
+        "label scanning, pillbox inventory, and human-reviewed photo/video verification."
+    ),
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -41,28 +77,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    await init_db()
+for module in (
+    auth,
+    users,
+    medications,
+    schedules,
+    photo_events,
+    adherence,
+    dose_verification,
+    pill_analysis,
+    pillbox,
+):
+    app.include_router(module.router)
 
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"app": "Pillbox API", "status": "ok"}
+    return {"app": "Adhera API", "status": "ok"}
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(medications_router)
-app.include_router(schedules_router)
-app.include_router(photo_events_router)
-app.include_router(adherence_router)
 
 
 if __name__ == "__main__":

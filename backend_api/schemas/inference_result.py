@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -5,6 +7,9 @@ class InferenceResultBase(BaseModel):
     compartment_index: int = Field(..., ge=0, le=13)
     is_changed: bool
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # "changed" | "unchanged" | "occluded" | "low_quality"; None for legacy rows.
+    state: Optional[str] = None
+    quality_score: Optional[float] = None
 
 
 class InferenceResultCreate(InferenceResultBase):

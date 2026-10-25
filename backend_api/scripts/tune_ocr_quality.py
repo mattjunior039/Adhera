@@ -4,10 +4,7 @@ import argparse
 import statistics
 from pathlib import Path
 
-try:
-    from backend_api.services.ocr_service import _load_image, _quality_gate
-except ImportError:
-    from services.ocr_service import _load_image, _quality_gate
+from backend_api.services.ocr_service import _load_image, _quality_gate
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -61,12 +58,14 @@ def main() -> int:
         try:
             img = _load_image(path)
             q = _quality_gate(img)
-            metrics.append({
-                "blur_score": float(q.get("blur_score", 0.0)),
-                "mean_intensity": float(q.get("mean_intensity", 0.0)),
-                "contrast_score": float(q.get("contrast_score", 0.0)),
-                "skew_degrees": float(q.get("skew_degrees", 0.0)),
-            })
+            metrics.append(
+                {
+                    "blur_score": float(q.get("blur_score", 0.0)),
+                    "mean_intensity": float(q.get("mean_intensity", 0.0)),
+                    "contrast_score": float(q.get("contrast_score", 0.0)),
+                    "skew_degrees": float(q.get("skew_degrees", 0.0)),
+                }
+            )
         except Exception:
             failed += 1
 

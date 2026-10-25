@@ -1,28 +1,27 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-try:
-    from backend_api.config import get_sync_database_url
-    from backend_api.database import Base
-    from backend_api.models import InferenceResult, Medication, PhotoEvent, Schedule, User
-except ImportError:  # pragma: no cover - script execution fallback
-    from config import get_sync_database_url
-    from database import Base
-    from models import InferenceResult, Medication, PhotoEvent, Schedule, User
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import backend_api.models  # noqa: F401  - registers every table on Base.metadata
+from backend_api.config import get_database_url
+from backend_api.database import Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_sync_database_url())
+config.set_main_option("sqlalchemy.url", get_database_url())
 
 target_metadata = Base.metadata
 

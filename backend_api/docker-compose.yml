@@ -18,7 +18,7 @@ services:
       dockerfile: Dockerfile
     container_name: pillbox-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8001:8000"
     depends_on:
       - db
     env_file:
@@ -26,22 +26,33 @@ services:
     environment:
       # Automatically points the API to the new database container
       DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/pillbox
-      # Path inside container. Mount your service account JSON at this location.
-      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
       # RxNorm name canonicalization mode: api | local | both
       RXNORM_LOOKUP_MODE: ${RXNORM_LOOKUP_MODE:-api}
-      RXNORM_LOCAL_PATH: ${RXNORM_LOCAL_PATH:-/app/datasets/rxnorm_names.json}
+      RXNORM_LOCAL_PATH: ${RXNORM_LOCAL_PATH:-/app/backend_api/datasets/rxnorm_names.json}
       RXNORM_API_TIMEOUT_SECONDS: ${RXNORM_API_TIMEOUT_SECONDS:-4.0}
-      # Optional local model endpoint for SIG normalization.
-      LOCAL_SIG_LLM_ENDPOINT: ${LOCAL_SIG_LLM_ENDPOINT:-}
-      LOCAL_SIG_LLM_MODEL: ${LOCAL_SIG_LLM_MODEL:-llama3:8b}
+      # Loose-pill detection (/pills/analyze) + embedding. Weight caches live on
+      # the model_cache volume so multi-GB downloads survive container rebuilds.
+      PILL_DETECTION_MODEL_PATH: ${PILL_DETECTION_MODEL_PATH:-/app/runs/pill_model/weights/best.pt}
+      PILL_SEGMENTATION_MIN_CONFIDENCE: ${PILL_SEGMENTATION_MIN_CONFIDENCE:-0.4}
+      OFFICIAL_PILL_CHECKPOINT: ${OFFICIAL_PILL_CHECKPOINT:-/app/runs/official_blue_pm/corrected_batch_01/pills_model/weights/best.pt}
+      OFFICIAL_COMPARTMENT_CHECKPOINT: ${OFFICIAL_COMPARTMENT_CHECKPOINT:-/app/runs/official_blue_pm/corrected_batch_01/compartments_model/weights/best.pt}
+      OFFICIAL_VIDEO_DEVICE: ${OFFICIAL_VIDEO_DEVICE:-cpu}
+      PILL_EMBEDDING_DEVICE: ${PILL_EMBEDDING_DEVICE:-cpu}
+      PRELOAD_PILL_MODELS: ${PRELOAD_PILL_MODELS:-false}
+      TORCH_HOME: /app/.cache/torch
     volumes:
-      - ./uploads:/app/uploads
+      - ./uploads:/app/backend_api/uploads
+      - ./services:/app/backend_api/services
+      - ./routers:/app/backend_api/routers
+      - ./main.py:/app/backend_api/main.py
       # Optional local RxNorm-derived dataset.
-      - ./datasets:/app/datasets:ro
-      # Keep read-only for secret files.
-      - ./secrets:/app/secrets:ro
+      - ./datasets:/app/backend_api/datasets:ro
+      # Persist DINOv2 weights across rebuilds.
+      - model_cache:/app/.cache
+      # Local official video checkpoints plus the separate loose-pill detector.
+      - ./runs:/app/runs
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  model_cache:

@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'app_config.dart';
+import '../app_config.dart';
 
 class ApiException implements Exception {
   ApiException(this.message, {this.statusCode, this.type});
@@ -30,31 +30,32 @@ class ApiException implements Exception {
   }
 
   @override
-  String toString() => 'ApiException(statusCode: $statusCode, message: $message, type: $type)';
+  String toString() =>
+      'ApiException(statusCode: $statusCode, message: $message, type: $type)';
 }
 
 class ApiService {
-  ApiService() : dio = Dio(BaseOptions(
+  ApiService()
+    : dio = Dio(
+        BaseOptions(
           baseUrl: AppConfig.baseUrl,
-          // Keep connect timeout short for unreachable hosts, but allow OCR responses longer.
-          connectTimeout: const Duration(seconds: 8),
-          receiveTimeout: const Duration(seconds: 75),
-          sendTimeout: const Duration(seconds: 30),
+          // Increased connect timeout for larger payloads/video uploads
+          connectTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+          sendTimeout: const Duration(seconds: 120),
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-        )) {
-    dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-      logPrint: (obj) => debugPrint(obj.toString()),
-    ));
-  }
+        ),
+      );
 
   final Dio dio;
 
-  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters}) async {
+  Future<Response<T>> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
     try {
       return await dio.get<T>(path, queryParameters: queryParameters);
     } on DioException catch (e) {
@@ -79,9 +80,13 @@ class ApiService {
   }
 }
 
-void debugPrint(Object? object) {
-  // no-op placeholder to avoid depending on Flutter-only debugPrint in tests
-  // The actual logger is provided by Dio's LogInterceptor when used in Flutter runtime.
-}
-
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+
+/// Parses a backend timestamp as UTC and converts it to local time.
+///
+/// The API stores UTC, but SQLite returns values without an offset; Dart would
+/// otherwise interpret those as local time.
+DateTime parseServerDateTime(String value) {
+  final hasOffset = RegExp(r'(Z|[+-]\d{2}:?\d{2})$').hasMatch(value);
+  return DateTime.parse(hasOffset ? value : '${value}Z').toLocal();
+}

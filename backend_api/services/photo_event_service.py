@@ -1,12 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.models.photo_event import PhotoEvent
-    from backend_api.schemas.photo_event import PhotoEventCreate
-except ImportError:  # pragma: no cover - script execution fallback
-    from models.photo_event import PhotoEvent
-    from schemas.photo_event import PhotoEventCreate
+from backend_api.models.photo_event import PhotoEvent
+from backend_api.schemas.photo_event import PhotoEventCreate
 
 
 async def create_photo_event(db: AsyncSession, photo_event_in: PhotoEventCreate) -> PhotoEvent:
@@ -18,5 +14,7 @@ async def create_photo_event(db: AsyncSession, photo_event_in: PhotoEventCreate)
 
 
 async def get_user_photo_events(db: AsyncSession, user_id: int) -> list[PhotoEvent]:
-    result = await db.execute(select(PhotoEvent).where(PhotoEvent.user_id == user_id).order_by(PhotoEvent.event_time.desc()))
+    result = await db.execute(
+        select(PhotoEvent).where(PhotoEvent.user_id == user_id).order_by(PhotoEvent.event_time.desc())
+    )
     return list(result.scalars().all())

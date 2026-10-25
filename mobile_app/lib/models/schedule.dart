@@ -27,11 +27,11 @@ class Schedule {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'user_id': userId,
-        'medication_id': medicationId,
-        'day_of_week': dayOfWeek,
-        'time_of_day': timeOfDay,
-        'notes': notes,
-      };
+    'id': id,
+    'user_id': userId,
+    'medication_id': medicationId,
+    'day_of_week': dayOfWeek,
+    'time_of_day': timeOfDay,
+    'notes': notes,
+  };
 }

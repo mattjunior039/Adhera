@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-  static const String _configuredBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
 
   static String get baseUrl {
     if (_configuredBaseUrl.isNotEmpty) {

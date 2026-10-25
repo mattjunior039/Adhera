@@ -5,12 +5,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-try:
-    from backend_api.models.user import User
-    from backend_api.schemas.user import UserCreate
-except ImportError:  # pragma: no cover - script execution fallback
-    from models.user import User
-    from schemas.user import UserCreate
+from backend_api.models.user import User
+from backend_api.schemas.user import UserCreate
 
 
 def hash_password(password: str) -> str:

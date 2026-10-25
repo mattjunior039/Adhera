@@ -1,1 +1,1 @@
-"""API router package for the Pillbox backend."""
+"""API router package for the Adhera backend."""

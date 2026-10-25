@@ -1,85 +1,28 @@
-"""Hybrid OCR pipeline for prescription label scanning.
+"""OCR pipeline for prescription label scanning using Gemini LLM.
 
 Pipeline goals:
 - quality control gate before OCR
-- automatic label-region flattening and crop before OCR
-- hybrid OCR provider fallback: Google Vision -> device hint text -> Tesseract
-- deterministic field extraction and SIG normalization
-- optional constrained local-LLM normalization and low-confidence field recovery
+- automatic label-region flattening and crop before AI extraction
+- Gemini structured output (JSON) extraction via google-genai
 """
+
 from __future__ import annotations
 
 import base64
-import json
 import os
-import re
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import cv2
 import numpy as np
 
-try:
-    import httpx
-except ImportError:
-    httpx = None  # type: ignore[assignment]
-
 PILImage = None
-pytesseract = None
+PILImageOps = None
 try:
-    import pytesseract  # type: ignore[import-not-found]
     from PIL import Image as PILImage  # type: ignore[import-not-found]
-    _TESSERACT_OK = True
+    from PIL import ImageOps as PILImageOps  # type: ignore[import-not-found]
 except ImportError:
-    _TESSERACT_OK = False
-
-vision = None
-try:
-    from google.cloud import vision  # type: ignore[import-not-found]
-    _GCV_OK = True
-except ImportError:
-    _GCV_OK = False
-
-try:
-    from backend_api.services.drug_dictionary import match_to_dict
-except ImportError:
-    from services.drug_dictionary import match_to_dict
-
-SIG_DICT: Dict[str, str] = {
-    "po": "oral",
-    "pr": "rectal",
-    "sl": "sublingual",
-    "bid": "twice daily",
-    "tid": "3 times daily",
-    "qid": "4 times daily",
-    "qhs": "at bedtime",
-    "qam": "every morning",
-    "qpm": "every evening",
-    "prn": "as needed",
-    "qd": "daily",
-    "qod": "every other day",
-}
-
-_DOSE_WORDS: Dict[str, float] = {
-    "half": 0.5,
-    "one": 1.0,
-    "two": 2.0,
-    "three": 3.0,
-    "four": 4.0,
-}
-
-_GENERIC_DOSAGE_FORMS = {
-    "tab",
-    "tabs",
-    "tablet",
-    "tablets",
-    "cap",
-    "caps",
-    "capsule",
-    "capsules",
-    "ml",
-    "units",
-}
+    pass
 
 
 def _load_image(image_path: Union[str, Path]) -> np.ndarray:
@@ -133,21 +76,25 @@ def _quality_gate(img: np.ndarray) -> Dict[str, Union[bool, float, str]]:
     }
 
 
-def _preprocess_for_ocr(img: np.ndarray) -> np.ndarray:
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    h, w = gray.shape
-    if max(h, w) < 1400:
-        scale = 1400 / max(h, w)
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    denoise = cv2.bilateralFilter(gray, d=7, sigmaColor=55, sigmaSpace=55)
-    return cv2.adaptiveThreshold(
-        denoise,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        35,
-        9,
-    )
+def _apply_exif_orientation(image_path: Union[str, Path], fallback: np.ndarray) -> np.ndarray:
+    if PILImage is None:
+        return fallback
+    try:
+        with PILImage.open(str(image_path)) as source:
+            corrected = PILImageOps.exif_transpose(source).convert("RGB")
+            array = np.asarray(corrected)
+        return cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+    except Exception:
+        return fallback
+
+
+def _normalize_for_cloud_ocr(img: np.ndarray) -> np.ndarray:
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    l_enhanced = clahe.apply(l_channel)
+    merged = cv2.merge((l_enhanced, a_channel, b_channel))
+    return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
 
 
 def _order_points(points: np.ndarray) -> np.ndarray:
@@ -165,7 +112,11 @@ def _warp_label_region(img: np.ndarray) -> tuple[np.ndarray, Dict[str, Union[boo
     height, width = img.shape[:2]
     working_width = min(width, 1600)
     scale = working_width / float(width) if width > working_width else 1.0
-    working = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale != 1.0 else img.copy()
+    working = (
+        cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        if scale != 1.0
+        else img.copy()
+    )
 
     gray = cv2.cvtColor(working, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -231,12 +182,15 @@ def _warp_label_region(img: np.ndarray) -> tuple[np.ndarray, Dict[str, Union[boo
             "label_region_reason": "candidate_too_small",
         }
 
-    dst = np.array([
-        [0, 0],
-        [max_width - 1, 0],
-        [max_width - 1, max_height - 1],
-        [0, max_height - 1],
-    ], dtype="float32")
+    dst = np.array(
+        [
+            [0, 0],
+            [max_width - 1, 0],
+            [max_width - 1, max_height - 1],
+            [0, max_height - 1],
+        ],
+        dtype="float32",
+    )
     transform = cv2.getPerspectiveTransform(ordered, dst)
     warped = cv2.warpPerspective(working, transform, (max_width, max_height))
 
@@ -302,388 +256,95 @@ def compose_flattened_label_from_images(images: list[np.ndarray]) -> tuple[np.nd
     }
 
 
-def _ocr_with_tesseract(img: np.ndarray) -> str:
-    if not _TESSERACT_OK or PILImage is None or pytesseract is None:
-        raise RuntimeError(
-            "pytesseract / Tesseract is not installed. "
-            "Install: pip install pytesseract Pillow and brew install tesseract"
-        )
-    pre = _preprocess_for_ocr(img)
-    pil_img = PILImage.fromarray(pre)
-    return pytesseract.image_to_string(pil_img, config="--oem 3 --psm 6")
+from pydantic import BaseModel, Field
 
 
-def _center_weighted_text_from_annotations(response: object, width: int, height: int) -> str:
-    annotations = getattr(response, "text_annotations", None) or []
-    if len(annotations) <= 1:
-        return ""
-
-    focus_items: list[tuple[float, float, str]] = []
-    for ann in annotations[1:]:
-        text = (getattr(ann, "description", "") or "").strip()
-        if not text:
-            continue
-        poly = getattr(ann, "bounding_poly", None)
-        vertices = getattr(poly, "vertices", None) if poly is not None else None
-        if not vertices:
-            continue
-
-        xs: list[float] = []
-        ys: list[float] = []
-        for v in vertices:
-            x = getattr(v, "x", None)
-            y = getattr(v, "y", None)
-            if x is None or y is None:
-                continue
-            xs.append(float(x))
-            ys.append(float(y))
-        if not xs or not ys or width <= 0 or height <= 0:
-            continue
-
-        cx = sum(xs) / len(xs)
-        cy = sum(ys) / len(ys)
-        nx = cx / float(width)
-        ny = cy / float(height)
-
-        # Non-destructive spatial filter: retain broad central area while
-        # preserving context from full-image OCR output.
-        if 0.12 <= nx <= 0.88 and 0.05 <= ny <= 0.95:
-            focus_items.append((cy, cx, text))
-
-    if not focus_items:
-        return ""
-
-    focus_items.sort(key=lambda item: (item[0], item[1]))
-    row_tol = max(12.0, float(height) * 0.018)
-    lines: list[list[str]] = []
-    current_line: list[str] = []
-    current_y: Optional[float] = None
-
-    for cy, _cx, token in focus_items:
-        if current_y is None or abs(cy - current_y) <= row_tol:
-            current_line.append(token)
-            current_y = cy if current_y is None else (current_y + cy) / 2.0
-            continue
-        lines.append(current_line)
-        current_line = [token]
-        current_y = cy
-
-    if current_line:
-        lines.append(current_line)
-
-    return "\n".join(" ".join(line).strip() for line in lines if line)
+class PrescriptionParseResult(BaseModel):
+    medication_name: str = Field(default="")
+    dosage: str = Field(default="")
+    instructions: str = Field(default="")
+    medication_name_raw: str = Field(default="")
+    medication_name_confidence: str = Field(default="high")
+    medication_name_matched: bool = Field(default=False)
+    medication_name_match_score: float = Field(default=0.0)
+    medication_name_source: str = Field(default="gemini")
+    medication_name_rxcui: Optional[str] = Field(default=None)
+    refills_remaining: str = Field(default="")
+    prescribed_by: str = Field(default="")
+    pharmacy: str = Field(default="")
+    requires_human_review: bool = Field(default=False)
 
 
-def _ocr_with_google_vision(img: np.ndarray) -> Dict[str, str]:
-    if not _GCV_OK or vision is None:
-        raise RuntimeError("google-cloud-vision is not installed")
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS not set")
-    ok, encoded = cv2.imencode(".jpg", img)
-    if not ok:
-        raise RuntimeError("Failed to encode image for Google Vision")
-    client = vision.ImageAnnotatorClient()
-    gimg = vision.Image(content=encoded.tobytes())
-    response = client.document_text_detection(image=gimg)
-    if response.error.message:
-        raise RuntimeError(response.error.message)
-    full_text = ""
-    if response.text_annotations:
-        full_text = response.text_annotations[0].description or ""
-    h, w = img.shape[:2]
-    focus_text = _center_weighted_text_from_annotations(response, w, h)
-    return {
-        "full_text": full_text,
-        "focus_text": focus_text,
-    }
-
-
-def _normalize_whitespace(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _parse_dose_quantity(token: str) -> Optional[float]:
-    if not token:
-        return None
-    raw = token.strip().lower()
-    if raw in _DOSE_WORDS:
-        return _DOSE_WORDS[raw]
-    if re.fullmatch(r"\d+(?:\.\d+)?", raw):
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    if re.fullmatch(r"\d+\s*/\s*\d+", raw):
-        left, right = raw.split("/")
-        try:
-            denominator = float(right)
-            if denominator == 0:
-                return None
-            return float(left) / denominator
-        except ValueError:
-            return None
-    return None
-
-
-def _should_fallback_from_cloud_error(error_text: str) -> bool:
-    msg = error_text.lower()
-    return any(
-        needle in msg
-        for needle in (
-            "quota",
-            "resource_exhausted",
-            "deadline",
-            "timed out",
-            "timeout",
-            "unavailable",
-            "connection",
-            "socket",
-            "503",
-            "429",
-        )
-    )
-
-
-def _field_confidence_score(parsed: Dict[str, object]) -> int:
-    score = 0
-    if str(parsed.get("medication_name") or "").strip():
-        score += 1
-    if str(parsed.get("dosage") or "").strip():
-        score += 1
-    if str(parsed.get("instructions") or "").strip():
-        score += 1
-    if str(parsed.get("refills_remaining") or "").strip():
-        score += 1
-    return score
-
-
-def _extract_fields_with_local_llm(raw_text: str) -> Optional[Dict[str, object]]:
-    endpoint = os.getenv("LOCAL_SIG_LLM_ENDPOINT", "").strip()
-    if not endpoint or httpx is None:
-        return None
-
-    max_chars = int(os.getenv("LOCAL_FIELD_LLM_MAX_CHARS", "6000"))
-    prompt = (
-        "You are extracting prescription label fields. "
-        "Return only strict JSON with keys: medication_name, dosage, instructions, refills. "
-        "Each value must be string or null, except refills which must be integer or null. "
-        "Do not infer missing values.\n\n"
-        "Raw OCR text:\n"
-        f"{raw_text[:max_chars]}"
-    )
-    payload = {
-        "model": os.getenv("LOCAL_SIG_LLM_MODEL", "llama3:8b"),
-        "prompt": prompt,
-        "stream": False,
-    }
-
+def _call_gemini_ocr(images: list[np.ndarray], device_text: str = "") -> Dict[str, object]:
     try:
-        response = httpx.post(endpoint, json=payload, timeout=10.0)
-        response.raise_for_status()
-        body = response.json()
-        content = body.get("response", "")
-        obj = json.loads(content)
-        if not isinstance(obj, dict):
-            return None
+        import PIL.Image
+        from google import genai
+        from google.genai import types
 
-        refills_value = obj.get("refills")
-        refills: Optional[str] = None
-        if isinstance(refills_value, int):
-            refills = str(refills_value)
-        elif isinstance(refills_value, str) and refills_value.strip().isdigit():
-            refills = refills_value.strip()
+        api_key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", ""))
+        if not api_key:
+            # Fallback if no API key is provided
+            return PrescriptionParseResult(requires_human_review=True, raw_text=device_text).model_dump()
 
-        return {
-            "medication_name": obj.get("medication_name") if isinstance(obj.get("medication_name"), str) else None,
-            "dosage": obj.get("dosage") if isinstance(obj.get("dosage"), str) else None,
-            "instructions": obj.get("instructions") if isinstance(obj.get("instructions"), str) else None,
-            "refills_remaining": refills,
-        }
-    except Exception:
-        return None
+        client = genai.Client(api_key=api_key)
 
+        contents = []
+        for img in images:
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            pil_img = PIL.Image.fromarray(rgb)
+            contents.append(pil_img)
 
-def _normalize_sig_deterministic(raw: str) -> Dict[str, Union[bool, float, int, str, None]]:
-    text = _normalize_whitespace(raw.lower())
-    tokens = re.findall(r"[a-z0-9/.]+", text)
-    mapped = [SIG_DICT[t] if t in SIG_DICT else t for t in tokens]
-    mapped_text = " ".join(mapped)
+        prompt = (
+            "Extract prescription details from these label images. "
+            f"Here is a device-provided OCR hint if helpful: {device_text}. "
+            "Ensure you extract the medication name, dosage, instructions (SIG), refills, pharmacy, and prescriber."
+        )
+        contents.append(prompt)
 
-    dose: Optional[int] = None
-    dose_float: Optional[float] = None
-    dose_text: Optional[str] = None
-    dose_unit: Optional[str] = None
-    dose_match = re.search(
-        r"(?:take\s+)?(\d+\s*/\s*\d+|\d+(?:\.\d+)?|half|one|two|three|four)\s*"
-        r"(tab(?:s)?|tablet(?:s)?|cap(?:sule)?(?:s)?|puff(?:s)?|ml|teaspoon(?:s)?|tsp)?",
-        mapped_text,
-    )
-    if dose_match:
-        dose_text = dose_match.group(1)
-        dose_unit = dose_match.group(2)
-        if dose_text:
-            dose_float = _parse_dose_quantity(dose_text)
-        if dose_float is not None and float(dose_float).is_integer():
-            dose = int(dose_float)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=PrescriptionParseResult,
+                temperature=0.0,
+            ),
+        )
+        if response.parsed:
+            return response.parsed.model_dump()
+        else:
+            return PrescriptionParseResult(requires_human_review=True, raw_text=device_text).model_dump()
 
-    route = "oral" if ("oral" in mapped_text or "by mouth" in mapped_text or "mouth" in mapped_text) else None
-    frequency = None
-    qh_match = re.search(r"\bq\s*(\d{1,2})h\b", mapped_text)
-    every_hours_match = re.search(r"\bevery\s+(\d{1,2})\s*hours?\b", mapped_text)
-    if qh_match:
-        frequency = f"every {int(qh_match.group(1))} hours"
-    elif every_hours_match:
-        frequency = f"every {int(every_hours_match.group(1))} hours"
-    elif "3 times daily" in mapped_text:
-        frequency = "3 times daily"
-    elif "twice daily" in mapped_text:
-        frequency = "twice daily"
-    elif "4 times daily" in mapped_text:
-        frequency = "4 times daily"
-    elif "once daily" in mapped_text:
-        frequency = "daily"
-    elif "daily" in mapped_text:
-        frequency = "daily"
-    elif "at bedtime" in mapped_text:
-        frequency = "at bedtime"
-
-    as_needed = "as needed" in mapped_text
-
-    return {
-        "raw": raw,
-        "normalized_text": mapped_text,
-        "dose": dose,
-        "dose_float": dose_float,
-        "dose_text": dose_text,
-        "dose_unit": dose_unit,
-        "route": route,
-        "frequency": frequency,
-        "as_needed": as_needed,
-    }
+    except Exception as e:
+        return PrescriptionParseResult(requires_human_review=True, raw_text=str(e)).model_dump()
 
 
-def _normalize_sig_with_local_llm(raw: str, deterministic: Dict[str, Union[bool, float, int, str, None]]) -> Dict[str, Union[bool, float, int, str, None]]:
-    endpoint = os.getenv("LOCAL_SIG_LLM_ENDPOINT", "").strip()
-    if not endpoint or httpx is None:
-        return deterministic
+def scan_prescription_label_multi_views(
+    image_paths: List[Union[str, Path]],
+    device_ocr_text: Optional[str] = None,
+    device_ocr_provider: Optional[str] = None,
+) -> Dict[str, object]:
+    if not image_paths:
+        raise ValueError("No images were provided for semantic fusion scan")
 
-    prompt = (
-        "Normalize this prescription SIG into strict JSON with keys "
-        "dose(int|null), route(string|null), frequency(string|null), as_needed(bool). "
-        "Do not invent values. If unsure, return null. SIG: "
-        f"{raw}"
-    )
-    payload = {
-        "model": os.getenv("LOCAL_SIG_LLM_MODEL", "llama3:8b"),
-        "prompt": prompt,
-        "stream": False,
-    }
+    normalized_views: List[np.ndarray] = []
+    for image_path in image_paths:
+        original = _load_image(image_path)
+        oriented = _apply_exif_orientation(image_path, original)
+        cropped, _ = _warp_label_region(oriented)
+        normalized = _normalize_for_cloud_ocr(cropped)
+        normalized_views.append(normalized)
 
-    try:
-        response = httpx.post(endpoint, json=payload, timeout=8.0)
-        response.raise_for_status()
-        body = response.json()
-        text = body.get("response", "")
-        llm_data = json.loads(text)
-        candidate = {
-            "raw": raw,
-            "normalized_text": deterministic.get("normalized_text"),
-            "dose": llm_data.get("dose"),
-            "route": llm_data.get("route"),
-            "frequency": llm_data.get("frequency"),
-            "as_needed": llm_data.get("as_needed"),
-        }
+    parsed_dict = _call_gemini_ocr(normalized_views, device_ocr_text or "")
 
-        # Guardrail: never let LLM invent if deterministic already has stronger value.
-        if deterministic.get("dose") is not None and candidate.get("dose") != deterministic.get("dose"):
-            candidate["dose"] = deterministic.get("dose")
-        if deterministic.get("route") and not candidate.get("route"):
-            candidate["route"] = deterministic.get("route")
-        if deterministic.get("frequency") and not candidate.get("frequency"):
-            candidate["frequency"] = deterministic.get("frequency")
-        if deterministic.get("as_needed") is True:
-            candidate["as_needed"] = True
-        return candidate
-    except Exception:
-        return deterministic
+    # Generate preview from the first flattened frame
+    flattened, _ = _warp_label_region(_apply_exif_orientation(image_paths[0], _load_image(image_paths[0])))
+    parsed_dict["label_preview_base64"] = _encode_preview_image(flattened)
+    parsed_dict["raw_text"] = device_ocr_text or ""
+    parsed_dict["ocr_provider_chain"] = [device_ocr_provider or "device_hint", "gemini-2.5-flash"]
+    parsed_dict["quality_gate"] = _quality_gate(normalized_views[0]) if normalized_views else {}
 
-
-def _parse_label_fields(text: str) -> Dict[str, object]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    full = "\n".join(lines)
-
-    dosage_match = re.search(
-        r"\b(\d+(?:\.\d+)?\s*(?:mg(?:/m[lL])?|mcg|g\b|iu|units?|tablet|cap(?:sule)?|ml)s?)\b",
-        full,
-        re.IGNORECASE,
-    )
-    dosage = dosage_match.group(1).strip() if dosage_match else ""
-
-    instr_match = re.search(
-        r"(take|apply|use|inject|inhale|swallow|instill)\b[^\n]{5,}",
-        full,
-        re.IGNORECASE,
-    )
-    instructions = instr_match.group(0).strip() if instr_match else ""
-    if not instructions:
-        for line in lines:
-            if re.search(r"\b(?:bid|tid|qid|qhs|qam|qpm|prn|qd|qod|q\d{1,2}h|every\s+\d+\s+hours?)\b", line, re.IGNORECASE):
-                instructions = line
-                break
-
-    refills_match = re.search(r"refills?\s*(?:remaining)?\s*[:\-]?\s*(\d+|no\s+refills?|none)", full, re.IGNORECASE)
-    refills = refills_match.group(1) if refills_match else None
-
-    prescriber_match = re.search(r"(?:prescrib(?:er|ed\s+by)\s*[:\-]?\s*|Dr\.?\s+)([A-Z][a-zA-Z\-\.\s]{2,40})", full)
-    prescriber = prescriber_match.group(0).strip() if prescriber_match else None
-
-    pharmacy = next((line for line in lines if re.search(r"pharm(?:acy)?", line, re.IGNORECASE)), None)
-    if pharmacy is None and lines:
-        pharmacy = lines[0]
-
-    dosage_prefix_name = re.compile(
-        r"^\d+(?:\.\d+)?\s*(?:mg(?:/m[lL])?|mcg|g|iu|units?)\s+([A-Za-z][A-Za-z0-9\-\s]{1,60})$",
-        re.IGNORECASE,
-    )
-    name_prefix_dosage = re.compile(
-        r"^([A-Za-z][A-Za-z0-9\-\s]{1,60})\s+\d+(?:\.\d+)?\s*(?:mg(?:/m[lL])?|mcg|g|iu|units?)$",
-        re.IGNORECASE,
-    )
-
-    med_name = ""
-    for line in lines:
-        clean = _normalize_whitespace(line)
-        m1 = dosage_prefix_name.match(clean)
-        if m1:
-            candidate = m1.group(1).strip()
-            if candidate.lower() not in _GENERIC_DOSAGE_FORMS:
-                med_name = candidate
-                break
-        m2 = name_prefix_dosage.match(clean)
-        if m2:
-            candidate = m2.group(1).strip()
-            if candidate.lower() not in _GENERIC_DOSAGE_FORMS:
-                med_name = candidate
-                break
-
-    skip = re.compile(
-        r"^(\d|take |apply |use |refill|qty|pharm|prescrib|patient|rx\s*#|date|dob|dr\.?\s)",
-        re.IGNORECASE,
-    )
-    for line in lines:
-        if len(line) > 3 and not skip.match(line) and line != pharmacy:
-            if not med_name:
-                med_name = line
-                break
-
-    return {
-        "medication_name": med_name,
-        "dosage": dosage,
-        "instructions": instructions,
-        "refills_remaining": refills,
-        "prescribed_by": prescriber,
-        "pharmacy": pharmacy,
-    }
+    return parsed_dict
 
 
 def scan_prescription_label(
@@ -691,96 +352,4 @@ def scan_prescription_label(
     device_ocr_text: Optional[str] = None,
     device_ocr_provider: Optional[str] = None,
 ) -> Dict[str, object]:
-    img = _load_image(image_path)
-    label_img, label_region = _warp_label_region(img)
-    quality = _quality_gate(label_img)
-
-    ocr_sources: list[str] = []
-    raw_text = ""
-    full_cloud_text = ""
-    focus_cloud_text = ""
-    cloud_error = ""
-
-    try:
-        gcv = _ocr_with_google_vision(label_img)
-        full_cloud_text = (gcv.get("full_text") or "").strip()
-        focus_cloud_text = (gcv.get("focus_text") or "").strip()
-        if full_cloud_text:
-            raw_text = full_cloud_text
-            ocr_sources.append("google_cloud_vision_document")
-    except Exception as exc:
-        print("❌ CLOUD VISION FAILED:")
-        print(exc)
-        cloud_error = str(exc)
-
-    fallback_allowed = bool(cloud_error) and _should_fallback_from_cloud_error(cloud_error)
-    if fallback_allowed and device_ocr_text and device_ocr_text.strip():
-        raw_text = device_ocr_text.strip()
-        ocr_sources.append(device_ocr_provider or "device_hint")
-
-    if fallback_allowed and not raw_text:
-        raw_text = _ocr_with_tesseract(label_img)
-        if raw_text.strip():
-            ocr_sources.append("tesseract")
-
-    if not raw_text.strip():
-        if cloud_error:
-            raise RuntimeError(f"Cloud Vision failed and no fallback OCR text was available: {cloud_error}")
-        raise ValueError("OCR returned no readable text")
-
-    parse_source_text = focus_cloud_text if focus_cloud_text else raw_text
-    parsed = _parse_label_fields(parse_source_text)
-    if focus_cloud_text and full_cloud_text:
-        parsed_full = _parse_label_fields(full_cloud_text)
-        if _field_confidence_score(parsed_full) > _field_confidence_score(parsed):
-            parsed = parsed_full
-
-    medication_name_value = parsed.get("medication_name")
-    medication_name = medication_name_value if isinstance(medication_name_value, str) else None
-    name_match = match_to_dict(medication_name, threshold=85.0)
-
-    low_confidence_parse = (
-        _field_confidence_score(parsed) < 3
-        or not bool(name_match.get("matched"))
-        or not bool(str(parsed.get("instructions") or "").strip())
-    )
-    if low_confidence_parse:
-        llm_fields = _extract_fields_with_local_llm(raw_text)
-        if llm_fields is not None:
-            for key in ("medication_name", "dosage", "instructions", "refills_remaining"):
-                current_value = str(parsed.get(key) or "").strip()
-                llm_value = llm_fields.get(key)
-                if not current_value and isinstance(llm_value, str) and llm_value.strip():
-                    parsed[key] = llm_value.strip()
-
-            medication_name_value = parsed.get("medication_name")
-            medication_name = medication_name_value if isinstance(medication_name_value, str) else None
-            name_match = match_to_dict(medication_name, threshold=85.0)
-
-    parsed["medication_name_raw"] = name_match["raw_name"]
-    parsed["medication_name"] = name_match["snapped_name"]
-    parsed["medication_name_match_score"] = name_match["score"]
-    parsed["medication_name_confidence"] = name_match["confidence"]
-    parsed["medication_name_matched"] = name_match["matched"]
-    parsed["medication_name_source"] = name_match.get("source")
-    parsed["medication_name_rxcui"] = name_match.get("rxcui")
-
-    instructions_text = str(parsed.get("instructions") or "")
-    deterministic_sig = _normalize_sig_deterministic(instructions_text)
-    normalized_sig = _normalize_sig_with_local_llm(instructions_text, deterministic_sig)
-
-    parsed["quality_gate"] = quality
-    parsed["label_region"] = label_region
-    parsed["label_preview_base64"] = _encode_preview_image(label_img)
-    parsed["ocr_provider_chain"] = ocr_sources
-    parsed["raw_text"] = raw_text
-    if cloud_error:
-        parsed["cloud_vision_error"] = cloud_error
-    parsed["normalized_sig"] = normalized_sig
-    parsed["requires_human_review"] = (
-        (not bool(quality.get("passed")))
-        or not bool(name_match["matched"])
-        or not bool(parsed.get("medication_name"))
-        or not bool(parsed.get("instructions"))
-    )
-    return parsed
+    return scan_prescription_label_multi_views([image_path], device_ocr_text, device_ocr_provider)

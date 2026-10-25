@@ -1,3 +1,23 @@
+const medicationInstructionOptions = [
+  'Take with food',
+  'Take on an empty stomach',
+  'After breakfast',
+  'Before breakfast',
+  'After lunch',
+  'Before dinner',
+  'At bedtime',
+  'With water',
+  'As needed',
+];
+
+String? buildMedicationInstructions(Iterable<String> selected, String custom) {
+  final instructions = [
+    ...selected,
+    if (custom.trim().isNotEmpty) custom.trim(),
+  ].join(' \u2022 ');
+  return instructions.isEmpty ? null : instructions;
+}
+
 class Medication {
   const Medication({
     required this.id,
@@ -24,10 +44,10 @@ class Medication {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'user_id': userId,
-        'name': name,
-        'dosage': dosage,
-        'instructions': instructions,
-      };
+    'id': id,
+    'user_id': userId,
+    'name': name,
+    'dosage': dosage,
+    'instructions': instructions,
+  };
 }

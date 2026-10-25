@@ -15,6 +15,7 @@ class MedicationCreate(MedicationBase):
 
 class MedicationUpdate(BaseModel):
     """All fields optional so clients can send only the changed ones."""
+
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     dosage: Optional[str] = Field(default=None, max_length=100)
     instructions: Optional[str] = Field(default=None, max_length=1000)

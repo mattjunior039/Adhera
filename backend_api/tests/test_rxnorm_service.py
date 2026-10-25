@@ -7,10 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-try:
-    import backend_api.services.rxnorm_service as rxnorm_service
-except ImportError:
-    import services.rxnorm_service as rxnorm_service
+import backend_api.services.rxnorm_service as rxnorm_service
 
 
 class RxNormServiceTests(unittest.TestCase):
@@ -39,10 +36,13 @@ class RxNormServiceTests(unittest.TestCase):
 
     def test_local_mode_uses_dataset(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tmp:
-            json.dump([
-                {"name": "Metformin", "rxcui": "6809"},
-                {"name": "Lisinopril", "rxcui": "29046"},
-            ], tmp)
+            json.dump(
+                [
+                    {"name": "Metformin", "rxcui": "6809"},
+                    {"name": "Lisinopril", "rxcui": "29046"},
+                ],
+                tmp,
+            )
             tmp_path = tmp.name
 
         os.environ["RXNORM_LOOKUP_MODE"] = "local"
@@ -61,12 +61,16 @@ class RxNormServiceTests(unittest.TestCase):
         os.environ["RXNORM_LOCAL_PATH"] = "/tmp/does-not-exist-rxnorm.json"
         importlib.reload(rxnorm_service)
 
-        with patch.object(rxnorm_service, "api_rxnorm_match", return_value={
-            "name": "Metformin",
-            "rxcui": "6809",
-            "score": 93.0,
-            "source": "rxnorm_api",
-        }) as mocked_api:
+        with patch.object(
+            rxnorm_service,
+            "api_rxnorm_match",
+            return_value={
+                "name": "Metformin",
+                "rxcui": "6809",
+                "score": 93.0,
+                "source": "rxnorm_api",
+            },
+        ) as mocked_api:
             result = rxnorm_service.resolve_rxnorm("metfornin", threshold=85.0)
 
         mocked_api.assert_called_once()
@@ -77,10 +81,13 @@ class RxNormServiceTests(unittest.TestCase):
 
     def test_local_mode_respects_allowed_tty_scope(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tmp:
-            json.dump([
-                {"name": "Daily", "rxcui": "111", "tty": "DF"},
-                {"name": "Metformin", "rxcui": "6809", "tty": "IN"},
-            ], tmp)
+            json.dump(
+                [
+                    {"name": "Daily", "rxcui": "111", "tty": "DF"},
+                    {"name": "Metformin", "rxcui": "6809", "tty": "IN"},
+                ],
+                tmp,
+            )
             tmp_path = tmp.name
 
         os.environ["RXNORM_LOOKUP_MODE"] = "local"
