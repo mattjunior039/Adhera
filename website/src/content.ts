@@ -1,11 +1,15 @@
+const repoUrl = 'https://github.com/mattjunior039/PillBox'
+
 export const site = {
   name: 'Adhera',
+  repoUrl,
   contactEmail: 'matthew.flowerhill@gmail.com',
   nav: [
     { label: 'Product', href: '#product' },
     { label: 'How it works', href: '#how-it-works' },
     { label: 'Our story', href: '#story' },
     { label: 'Team', href: '#team' },
+    { label: 'Source code', href: repoUrl },
   ],
   primaryCta: { label: 'Contact the team', href: '#contact' },
   secondaryCta: { label: 'See how it works', href: '#how-it-works' },
@@ -77,13 +81,13 @@ export const howItWorks = {
       key: 'prescription',
       label: 'Prescription',
       title: 'Scan the label',
-      body: 'Photograph the pharmacy bottle. OCR reads the drug name, dose, frequency, and instructions.',
+      body: 'Photograph the pharmacy bottle. Text recognition runs on the phone and reads the drug name, dose, frequency, and instructions.',
     },
     {
       key: 'schedule',
       label: 'Schedule',
       title: 'Build the regimen',
-      body: 'Adhera normalizes the drug name and turns label instructions into a weekly schedule.',
+      body: 'Adhera checks the drug name against the NIH RxNorm database and turns the label instructions into a weekly schedule.',
     },
     {
       key: 'detection',
@@ -106,98 +110,6 @@ export const howItWorks = {
   ],
 }
 
-export const features = {
-  heading: 'Eight capabilities. One quiet device.',
-  items: [
-    {
-      key: 'cv',
-      icon: 'eye',
-      title: 'Edge computer vision',
-      body: 'A custom YOLOv8 model determines which compartment was opened and whether the dose was removed.',
-      metric: { value: '96.3%', label: 'mAP50 on pill detection' },
-    },
-    {
-      key: 'ocr',
-      icon: 'scan',
-      title: 'On-device OCR',
-      body: 'Reads prescription labels, including curved bottles, and extracts the fields that matter.',
-    },
-    {
-      key: 'schedule',
-      icon: 'calendar',
-      title: 'Medication scheduling',
-      body: 'Converts label instructions into AM and PM compartments across the week.',
-    },
-    {
-      key: 'misuse',
-      icon: 'warning',
-      title: 'Misuse detection',
-      body: 'Flags pills taken from the wrong day or time slot, and doses that were only partly taken.',
-    },
-    {
-      key: 'refill',
-      icon: 'refill',
-      title: 'Refill prediction',
-      body: 'Tracks consumption against the filled quantity and projects when a refill is due.',
-    },
-    {
-      key: 'accessible',
-      icon: 'text',
-      title: 'Accessible instructions',
-      body: 'Rewrites dense label warnings as large-print, high-contrast guidance you can print.',
-    },
-    {
-      key: 'caregiver',
-      icon: 'bell',
-      title: 'Caregiver alerts',
-      body: 'Missed, early, or incorrect doses reach a family member or clinician you choose.',
-    },
-    {
-      key: 'privacy',
-      icon: 'shield',
-      title: 'Privacy-first architecture',
-      body: 'Images are processed on your local network instead of being routinely sent to cloud servers.',
-    },
-  ],
-}
-
-export const explorer = {
-  heading: 'Take it apart.',
-  sub: 'Drag to rotate. Scroll or pinch to zoom. Select a point to see what it does.',
-  hotspots: [
-    {
-      id: 'camera',
-      title: 'Inward-facing camera',
-      body: 'An ESP32-CAM module under the lid. It faces the tray, never the room or the person.',
-    },
-    {
-      id: 'compartments',
-      title: 'Fourteen compartments',
-      body: 'Seven days, AM and PM. Color-coded rows help the vision model orient the tray in any direction.',
-    },
-    {
-      id: 'processor',
-      title: 'Local compute',
-      body: 'Frames are handled on the device and your home network, then matched against the schedule.',
-    },
-    {
-      id: 'lights',
-      title: 'Indicator lights',
-      body: 'A glanceable status: dose due, dose confirmed, or something needs attention.',
-    },
-    {
-      id: 'lid',
-      title: 'Hall-effect lid sensor',
-      body: 'A magnet and sensor detect when the lid opens and closes, so the camera sleeps the rest of the time.',
-    },
-    {
-      id: 'power',
-      title: 'USB-C power',
-      body: 'Low standby draw because the camera only wakes on a lid event.',
-    },
-  ],
-}
-
 export const privacy = {
   heading: 'Designed around local processing.',
   sub: 'Adhera is built to minimize exposure of sensitive medication data. Images stay on your home network for processing.',
@@ -211,6 +123,7 @@ export const privacy = {
     'No medication images sent for external cloud processing',
     'Camera faces the pills, not the room',
     'Wakes on a lid event, no continuous video',
+    'Only drug names, never images, are checked against NIH RxNorm',
   ],
 }
 
@@ -226,45 +139,6 @@ export const comparison = {
   ],
 }
 
-export const prototype = {
-  heading: 'Built, not just imagined.',
-  sub: 'Adhera started as a working prototype called PillBox. These are from the bench.',
-  media: [
-    { src: '', title: 'Hardware prototype', caption: '3D-printed 7 by 2 organizer with lid camera', span: 'wide' },
-    { src: '', title: 'Computer vision output', caption: 'Compartment isolation and pill detection', span: 'tall' },
-    { src: '', title: 'OCR processing', caption: 'Label unwarping and field extraction', span: 'normal' },
-    { src: '', title: 'Mobile app', caption: 'Schedule and dose verification screens', span: 'normal' },
-    { src: '', title: 'Testing', caption: 'Video verification trials', span: 'normal' },
-  ],
-  stats: [
-    { value: '672', label: 'annotated compartment images' },
-    { value: '96.3%', label: 'mAP50 detection accuracy' },
-    { value: '14', label: 'compartments tracked per frame' },
-  ],
-}
-
-export const architecture = {
-  heading: 'System architecture.',
-  sub: 'Three layers, each replaceable. Proprietary details omitted.',
-  layers: [
-    {
-      key: 'hardware',
-      label: 'Hardware',
-      items: ['ESP32-CAM lid camera', 'Hall-effect lid sensor', '7 by 2 pill organizer', 'Local compute device'],
-    },
-    {
-      key: 'intelligence',
-      label: 'Intelligence',
-      items: ['YOLOv8 pill detection', 'Label OCR and unwarping', 'Drug name normalization', 'Schedule and misuse logic'],
-    },
-    {
-      key: 'software',
-      label: 'Software',
-      items: ['Patient app', 'Caregiver dashboard', 'Notifications', 'Refill tracking'],
-    },
-  ],
-}
-
 export const story = {
   heading: 'Adhera addresses a widespread problem.',
   paragraphs: [
@@ -277,33 +151,13 @@ export const story = {
 export const team = {
   heading: 'The team.',
   members: [
-    { name: 'Matthew Flowerhill', role: 'Software and AI Engineer', photo: 'team-matthew.png' },
-    { name: 'Neil Gupta', role: 'Hardware & IoT Integration', photo: 'team-neil.png' },
-    { name: 'Ved Gandhi', role: 'Product Manager', photo: 'team-ved.png' },
+    { name: 'Matthew Flowerhill', role: 'Software and AI Engineer', photo: 'team-matthew.jpg' },
+    { name: 'Neil Gupta', role: 'Hardware & IoT Integration', photo: 'team-neil.jpg' },
+    { name: 'Ved Gandhi', role: 'Product Manager', photo: 'team-ved.jpg' },
   ],
   collective:
     'Our team brings experience across healthcare, machine learning, software development, and medical-data environments, including work with organizations such as Kaiser Permanente, Cedars-Sinai, UC Davis Health, and Dartmouth Geisel School of Medicine.',
   disclaimer: 'These organizations are listed to describe team members\u2019 prior experience and do not endorse Adhera.',
-}
-
-export const progress = {
-  heading: 'Where we are.',
-  milestones: [
-    { title: 'Identified the adherence problem', status: 'done' },
-    { title: 'Conducted community interviews', status: 'done' },
-    { title: 'Built software prototype', status: 'done' },
-    { title: 'Developed OCR pipeline', status: 'done' },
-    { title: 'Implemented computer vision detection', status: 'done' },
-    { title: 'Built initial hardware prototype', status: 'done' },
-    { title: 'Began pharmacy and healthcare outreach', status: 'active' },
-    { title: 'Testing phase', status: 'active' },
-  ],
-}
-
-export const community = {
-  heading: 'Working with the community.',
-  sub: 'We are early and looking for people who can pressure-test Adhera in the real world.',
-  groups: ['Pharmacists', 'Physicians', 'Healthcare advisors', 'Technical mentors', 'Pilot organizations'],
 }
 
 export const contact = {

@@ -4,5 +4,6 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/adhera-website/',
+  // GitHub Pages serves the site from /<repository-name>/. Override with BASE_PATH for other hosts.
+  base: process.env.BASE_PATH ?? '/PillBox/',
 })
