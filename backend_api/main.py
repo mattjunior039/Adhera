@@ -21,13 +21,13 @@ if __package__ in (None, ""):
 
 from backend_api.database import init_db
 from backend_api.routers import (
+    adhera,
     adherence,
     auth,
     dose_verification,
     medications,
     photo_events,
     pill_analysis,
-    pillbox,
     schedules,
     users,
 )
@@ -64,7 +64,7 @@ app = FastAPI(
     version="1.0.0",
     description=(
         "Medication adherence backend: users, medications, schedules, prescription "
-        "label scanning, pillbox inventory, and human-reviewed photo/video verification."
+        "label scanning, Adhera inventory, and human-reviewed photo/video verification."
     ),
     lifespan=lifespan,
 )
@@ -86,7 +86,7 @@ for module in (
     adherence,
     dose_verification,
     pill_analysis,
-    pillbox,
+    adhera,
 ):
     app.include_router(module.router)
 

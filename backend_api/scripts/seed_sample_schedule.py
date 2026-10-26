@@ -12,13 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend_api.config import get_database_url
 from backend_api.database import Base
 from backend_api.models import (
+    AdheraOrientationProfile,
     CompartmentInventory,
     DoseOutcome,
     DoseVerificationEvent,
     InferenceResult,
     Medication,
     PhotoEvent,
-    PillboxOrientationProfile,
     Schedule,
     User,
 )
@@ -79,7 +79,7 @@ async def seed_sample_schedule(db: AsyncSession, *, reset_sample_data: bool = Fa
             DoseOutcome,
             DoseVerificationEvent,
             CompartmentInventory,
-            PillboxOrientationProfile,
+            AdheraOrientationProfile,
             PhotoEvent,
             Schedule,
             Medication,

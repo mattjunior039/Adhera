@@ -12,7 +12,7 @@ from backend_api.services.compartment_inventory_service import (
     update_inventory_slot,
 )
 
-router = APIRouter(prefix="/pillbox", tags=["pillbox-inventory"])
+router = APIRouter(prefix="/adhera", tags=["adhera-inventory"])
 
 
 def _response(slot) -> CompartmentInventoryResponse:
@@ -29,7 +29,7 @@ def _response(slot) -> CompartmentInventoryResponse:
 
 
 @router.get("/{user_id}/inventory", response_model=list[CompartmentInventoryResponse])
-async def get_pillbox_inventory(
+async def get_adhera_inventory(
     user_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> list[CompartmentInventoryResponse]:
@@ -40,7 +40,7 @@ async def get_pillbox_inventory(
     "/{user_id}/initialize-test-inventory",
     response_model=list[CompartmentInventoryResponse],
 )
-async def initialize_pillbox_inventory(
+async def initialize_adhera_inventory(
     user_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> list[CompartmentInventoryResponse]:
@@ -55,7 +55,7 @@ async def initialize_pillbox_inventory(
     "/{user_id}/inventory/{slot_id}",
     response_model=CompartmentInventoryResponse,
 )
-async def update_pillbox_inventory(
+async def update_adhera_inventory(
     user_id: int,
     slot_id: int,
     payload: CompartmentInventoryUpdate,

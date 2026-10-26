@@ -58,7 +58,7 @@ async def upload_photo(
     try:
         photo_event = PhotoEvent(
             user_id=user_id,
-            event_type="pillbox_capture",
+            event_type="adhera_capture",
             photo_path=str(save_path),
             event_time=datetime.now(timezone.utc),
             notes="Uploaded from mobile app",

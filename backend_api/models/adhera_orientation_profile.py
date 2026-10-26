@@ -16,14 +16,14 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class PillboxOrientationProfile(Base):
-    """Per-user calibration for which physical direction the pillbox columns run.
+class AdheraOrientationProfile(Base):
+    """Per-user calibration for which physical direction the Adhera columns run.
 
     Geometry alone can tell us column order is *consistent within one clip*, but not
     which end is Sunday — that needs either OCR or a one-time/auto-inferred anchor.
     """
 
-    __tablename__ = "pillbox_orientation_profiles"
+    __tablename__ = "adhera_orientation_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(

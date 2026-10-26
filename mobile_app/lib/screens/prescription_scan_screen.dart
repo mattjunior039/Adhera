@@ -508,7 +508,7 @@ class _PrescriptionScanScreenState
     if (!mounted) return;
     if (!kIsWeb && (deviceOcrText == null || deviceOcrText.trim().isEmpty)) {
       _updateCameraStatus(
-        'Little label text was found. You can enter the details by hand.',
+        'On-device OCR found little text. Continuing with cloud OCR.',
       );
     }
 

@@ -92,8 +92,8 @@ class DoseVerificationEvent {
   }
 }
 
-class PillboxOrientationProfile {
-  const PillboxOrientationProfile({
+class AdheraOrientationProfile {
+  const AdheraOrientationProfile({
     required this.userId,
     required this.columnOrder,
   });
@@ -102,8 +102,8 @@ class PillboxOrientationProfile {
   // "forward" (canonical column 0 = SUN) | "reversed" (canonical column 0 = SAT)
   final String columnOrder;
 
-  factory PillboxOrientationProfile.fromJson(Map<String, dynamic> json) {
-    return PillboxOrientationProfile(
+  factory AdheraOrientationProfile.fromJson(Map<String, dynamic> json) {
+    return AdheraOrientationProfile(
       userId: json['user_id'] as int,
       columnOrder: json['column_order'] as String,
     );
@@ -197,29 +197,29 @@ class DoseVerificationRepository {
         .toList();
   }
 
-  Future<PillboxOrientationProfile?> getOrientationProfile(int userId) async {
+  Future<AdheraOrientationProfile?> getOrientationProfile(int userId) async {
     final response = await _apiService.get<Map<String, dynamic>>(
-      '/pillbox-orientation/$userId',
+      '/adhera-orientation/$userId',
     );
     final data = response.data;
-    return data == null ? null : PillboxOrientationProfile.fromJson(data);
+    return data == null ? null : AdheraOrientationProfile.fromJson(data);
   }
 
-  /// Manually set/correct which direction the pillbox columns run for this user
+  /// Manually set/correct which direction the Adhera columns run for this user
   /// (e.g. after a WRONG_SLOT false alarm caused by bad auto-calibration).
-  Future<PillboxOrientationProfile> setOrientationProfile({
+  Future<AdheraOrientationProfile> setOrientationProfile({
     required int userId,
     required String columnOrder,
   }) async {
     try {
       final response = await _apiService.dio.put<Map<String, dynamic>>(
-        '/pillbox-orientation/$userId',
+        '/adhera-orientation/$userId',
         data: {'column_order': columnOrder},
       );
       if (response.data == null) {
         throw const FormatException('Orientation update response was empty');
       }
-      return PillboxOrientationProfile.fromJson(response.data!);
+      return AdheraOrientationProfile.fromJson(response.data!);
     } on DioException catch (e) {
       throw ApiException.fromDioException(e);
     }

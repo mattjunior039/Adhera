@@ -1,8 +1,7 @@
 # Adhera Mobile App
 
 The Flutter app for Adhera. It targets iOS and macOS. Project-wide setup is in
-the [root README](../README.md), and code structure is in
-[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
+the [root README](../README.md).
 
 ## Commands
 

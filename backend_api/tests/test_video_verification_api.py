@@ -11,10 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend_api.database import Base, get_db
+from backend_api.models.adhera_orientation_profile import AdheraOrientationProfile
 from backend_api.models.compartment_inventory import CompartmentInventory
 from backend_api.models.dose_verification_event import DoseVerificationEvent
 from backend_api.models.medication import Medication
-from backend_api.models.pillbox_orientation_profile import PillboxOrientationProfile
 from backend_api.models.user import User
 from backend_api.routers import dose_verification as route
 from backend_api.services import video_verification_service as service
@@ -171,7 +171,7 @@ class VideoAPITests(unittest.IsolatedAsyncioTestCase):
             slot = await db.get(CompartmentInventory, self.slot_id)
             assert slot is not None
             self.assertEqual(slot.pill_count, 2)
-            self.assertEqual((await db.execute(select(PillboxOrientationProfile))).scalars().all(), [])
+            self.assertEqual((await db.execute(select(AdheraOrientationProfile))).scalars().all(), [])
         history = await self.client.get(f"/dose-verification/{self.user_id}")
         self.assertEqual(history.status_code, 200, history.text)
         self.assertEqual(history.json(), [payload])

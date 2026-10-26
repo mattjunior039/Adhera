@@ -5,9 +5,9 @@ import 'package:adhera/app_router.dart';
 import 'package:adhera/models/medication.dart';
 import 'package:adhera/models/schedule.dart';
 import 'package:adhera/models/user.dart';
+import 'package:adhera/repositories/adhera_inventory_repository.dart';
 import 'package:adhera/repositories/dose_verification_repository.dart';
 import 'package:adhera/repositories/medication_repository.dart';
-import 'package:adhera/repositories/pillbox_inventory_repository.dart';
 import 'package:adhera/repositories/sample_day_provider.dart';
 import 'package:adhera/screens/home_dashboard_screen.dart';
 import 'package:adhera/state/adherence.dart';
@@ -52,8 +52,8 @@ void main() {
       overrides: [
         medicationsByUserProvider(1).overrideWith((ref) async => demoMeds),
         scheduleByUserProvider(1).overrideWith((ref) async => demoSchedules),
-        pillboxInventoryProvider(1)
-            .overrideWith((ref) async => <PillboxInventorySlot>[]),
+        adheraInventoryProvider(1)
+            .overrideWith((ref) async => <AdheraInventorySlot>[]),
         doseVerificationEventsProvider(1)
             .overrideWith((ref) async => <DoseVerificationEvent>[]),
       ],
@@ -231,7 +231,7 @@ void main() {
   testWidgets(
     'dashboard is usable while inventory and history are still pending',
     (tester) async {
-      final inventory = Completer<List<PillboxInventorySlot>>();
+      final inventory = Completer<List<AdheraInventorySlot>>();
       final events = Completer<List<DoseVerificationEvent>>();
       var adherenceStarted = false;
       await tester.pumpWidget(
@@ -244,7 +244,7 @@ void main() {
             ),
             scheduleByUserProvider(1)
                 .overrideWith((ref) async => const <Schedule>[]),
-            pillboxInventoryProvider(1).overrideWith((ref) => inventory.future),
+            adheraInventoryProvider(1).overrideWith((ref) => inventory.future),
             doseVerificationEventsProvider(1)
                 .overrideWith((ref) => events.future),
             todayAdherenceProvider.overrideWith((ref) async {
@@ -270,11 +270,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
       expect(find.text('Quick actions'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('Could not load pillbox inventory'),
+        find.text('Could not load Adhera inventory'),
         250,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Could not load pillbox inventory'), findsOneWidget);
+      expect(find.text('Could not load Adhera inventory'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -299,7 +299,7 @@ void main() {
       final slots = [
         for (final day in days)
           for (final period in const ['AM', 'PM'])
-            PillboxInventorySlot(
+            AdheraInventorySlot(
               id: slotId++,
               userId: 1,
               dayOfWeek: day,
@@ -317,7 +317,7 @@ void main() {
                 .overrideWith((ref) async => medications),
             scheduleByUserProvider(1)
                 .overrideWith((ref) async => const <Schedule>[]),
-            pillboxInventoryProvider(1).overrideWith((ref) async => slots),
+            adheraInventoryProvider(1).overrideWith((ref) async => slots),
             doseVerificationEventsProvider(1)
                 .overrideWith((ref) async => const <DoseVerificationEvent>[]),
             todayAdherenceProvider.overrideWith((ref) async => <int, String>{}),
@@ -331,7 +331,7 @@ void main() {
       expect(find.text('Verify with video'), findsNothing);
       expect(find.text('Verify dose'), findsNothing);
       await tester.scrollUntilVisible(
-        find.text('Weekly pillbox contents'),
+        find.text('Weekly Adhera contents'),
         400,
         scrollable: find.byType(Scrollable).first,
       );
@@ -342,7 +342,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Weekly pillbox contents'), findsOneWidget);
+      expect(find.text('Weekly Adhera contents'), findsOneWidget);
       expect(find.textContaining('Acetaminophen'), findsWidgets);
       expect(find.textContaining('Ibuprofen'), findsWidgets);
       expect(find.textContaining('pill(s) in compartment'), findsWidgets);

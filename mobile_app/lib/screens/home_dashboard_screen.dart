@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/schedule.dart';
+import '../repositories/adhera_inventory_repository.dart';
 import '../repositories/dose_verification_repository.dart';
 import '../repositories/medication_repository.dart';
-import '../repositories/pillbox_inventory_repository.dart';
 import '../repositories/sample_day_provider.dart';
 import '../services/api_service.dart';
 import '../state/adherence.dart';
@@ -307,7 +307,7 @@ class HomeDashboardScreen extends ConsumerWidget {
     final userId = ref.watch(userIdProvider);
     final medicationsState = ref.watch(medicationsByUserProvider(userId));
     final schedulesState = ref.watch(scheduleByUserProvider(userId));
-    final inventoryState = ref.watch(pillboxInventoryProvider(userId));
+    final inventoryState = ref.watch(adheraInventoryProvider(userId));
     final eventsState = ref.watch(doseVerificationEventsProvider(userId));
     final adherenceState = ref.watch(todayAdherenceProvider);
     if (medicationsState.isLoading || schedulesState.isLoading) {
@@ -332,7 +332,7 @@ class HomeDashboardScreen extends ConsumerWidget {
                   onPressed: () {
                     ref.invalidate(medicationsByUserProvider(userId));
                     ref.invalidate(scheduleByUserProvider(userId));
-                    ref.invalidate(pillboxInventoryProvider(userId));
+                    ref.invalidate(adheraInventoryProvider(userId));
                     ref.invalidate(doseVerificationEventsProvider(userId));
                   },
                   icon: const Icon(Icons.refresh),
@@ -348,7 +348,7 @@ class HomeDashboardScreen extends ConsumerWidget {
     final medications = medicationsState.requireValue;
     final schedules = schedulesState.requireValue;
     final inventory =
-        inventoryState.asData?.value ?? const <PillboxInventorySlot>[];
+        inventoryState.asData?.value ?? const <AdheraInventorySlot>[];
     final photoEvents =
         eventsState.asData?.value ?? const <DoseVerificationEvent>[];
     final caregivers = ref.watch(caregiversProvider);
@@ -484,17 +484,17 @@ class HomeDashboardScreen extends ConsumerWidget {
             WeeklySchedule(schedules: schedules, medications: medications)
           else ...[
             Text(
-              'Weekly pillbox contents',
+              'Weekly Adhera contents',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             if (inventoryState.isLoading) const LinearProgressIndicator(),
             if (inventoryState.hasError)
               ListTile(
-                title: const Text('Could not load pillbox inventory'),
+                title: const Text('Could not load Adhera inventory'),
                 trailing: TextButton(
                   onPressed: () =>
-                      ref.invalidate(pillboxInventoryProvider(userId)),
+                      ref.invalidate(adheraInventoryProvider(userId)),
                   child: const Text('Retry'),
                 ),
               ),

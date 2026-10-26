@@ -1,4 +1,4 @@
-const repoUrl = 'https://github.com/mattjunior039/PillBox'
+const repoUrl = 'https://github.com/mattjunior039/Adhera'
 
 export const site = {
   name: 'Adhera',

@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PillboxOrientationResponse(BaseModel):
+class AdheraOrientationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -12,5 +12,5 @@ class PillboxOrientationResponse(BaseModel):
     updated_at: datetime
 
 
-class PillboxOrientationUpdate(BaseModel):
+class AdheraOrientationUpdate(BaseModel):
     column_order: str = Field(..., pattern="^(forward|reversed)$")

@@ -64,13 +64,34 @@ class LabelParserTests(unittest.TestCase):
         self.assertEqual(result["instructions"], "")
         self.assertTrue(result["requires_human_review"])
 
-    def test_full_scan_runs_without_network_access(self) -> None:
+    def test_full_scan_uses_google_cloud_vision_when_available(self) -> None:
         image = np.full((480, 640, 3), 235, dtype=np.uint8)
         cv2.rectangle(image, (120, 100), (520, 380), (255, 255, 255), -1)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "label.jpg"
             cv2.imwrite(str(path), image)
-            with patch("socket.socket.connect", side_effect=AssertionError("network access attempted")):
+            with patch(
+                "backend_api.services.ocr_service._ocr_with_google_vision",
+                return_value={"full_text": LABEL, "focus_text": LABEL},
+            ):
+                result = ocr_service.scan_prescription_label_multi_views([path])
+        self.assertEqual(result["medication_name"], "Ibuprofen")
+        self.assertEqual(
+            result["ocr_provider_chain"],
+            ["google_cloud_vision_document", ocr_service.PARSER_NAME],
+        )
+        self.assertTrue(result["label_preview_base64"])
+
+    def test_full_scan_falls_back_to_device_ocr_when_cloud_vision_unavailable(self) -> None:
+        image = np.full((480, 640, 3), 235, dtype=np.uint8)
+        cv2.rectangle(image, (120, 100), (520, 380), (255, 255, 255), -1)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "label.jpg"
+            cv2.imwrite(str(path), image)
+            with patch(
+                "backend_api.services.ocr_service._ocr_with_google_vision",
+                side_effect=RuntimeError("network unavailable"),
+            ):
                 result = ocr_service.scan_prescription_label_multi_views([path], LABEL, "apple_vision")
         self.assertEqual(result["medication_name"], "Ibuprofen")
         self.assertEqual(result["ocr_provider_chain"], ["apple_vision", ocr_service.PARSER_NAME])

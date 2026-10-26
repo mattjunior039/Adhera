@@ -5,8 +5,8 @@ import '../services/api_service.dart';
 import 'medication_repository.dart'
     show medicationsByUserProvider, scheduleByUserProvider;
 
-class PillboxInventorySlot {
-  const PillboxInventorySlot({
+class AdheraInventorySlot {
+  const AdheraInventorySlot({
     required this.id,
     required this.userId,
     required this.dayOfWeek,
@@ -24,8 +24,8 @@ class PillboxInventorySlot {
   final String medicationName;
   final int pillCount;
 
-  factory PillboxInventorySlot.fromJson(Map<String, dynamic> json) {
-    return PillboxInventorySlot(
+  factory AdheraInventorySlot.fromJson(Map<String, dynamic> json) {
+    return AdheraInventorySlot(
       id: json['id'] as int,
       userId: json['user_id'] as int,
       dayOfWeek: json['day_of_week'] as String,
@@ -37,32 +37,32 @@ class PillboxInventorySlot {
   }
 }
 
-class PillboxInventoryRepository {
-  PillboxInventoryRepository(this._apiService);
+class AdheraInventoryRepository {
+  AdheraInventoryRepository(this._apiService);
 
   final ApiService _apiService;
 
-  Future<List<PillboxInventorySlot>> getInventory(int userId) async {
+  Future<List<AdheraInventorySlot>> getInventory(int userId) async {
     final response = await _apiService.get<List<dynamic>>(
-      '/pillbox/$userId/inventory',
+      '/adhera/$userId/inventory',
     );
     return (response.data ?? const <dynamic>[])
         .map(
-          (item) => PillboxInventorySlot.fromJson(
+          (item) => AdheraInventorySlot.fromJson(
             Map<String, dynamic>.from(item as Map),
           ),
         )
         .toList();
   }
 
-  Future<List<PillboxInventorySlot>> initializeTestInventory(int userId) async {
+  Future<List<AdheraInventorySlot>> initializeTestInventory(int userId) async {
     try {
       final response = await _apiService.dio.post<List<dynamic>>(
-        '/pillbox/$userId/initialize-test-inventory',
+        '/adhera/$userId/initialize-test-inventory',
       );
       return (response.data ?? const <dynamic>[])
           .map(
-            (item) => PillboxInventorySlot.fromJson(
+            (item) => AdheraInventorySlot.fromJson(
               Map<String, dynamic>.from(item as Map),
             ),
           )
@@ -73,15 +73,15 @@ class PillboxInventoryRepository {
   }
 }
 
-final pillboxInventoryRepositoryProvider = Provider<PillboxInventoryRepository>(
-  (ref) {
-    return PillboxInventoryRepository(ref.watch(apiServiceProvider));
-  },
-);
+final adheraInventoryRepositoryProvider = Provider<AdheraInventoryRepository>((
+  ref,
+) {
+  return AdheraInventoryRepository(ref.watch(apiServiceProvider));
+});
 
-final pillboxInventoryProvider =
-    FutureProvider.family<List<PillboxInventorySlot>, int>((ref, userId) async {
-      final repository = ref.watch(pillboxInventoryRepositoryProvider);
+final adheraInventoryProvider =
+    FutureProvider.family<List<AdheraInventorySlot>, int>((ref, userId) async {
+      final repository = ref.watch(adheraInventoryRepositoryProvider);
       final slots = await repository.getInventory(userId);
       if (slots.length == 14) return slots;
       final initialized = await repository.initializeTestInventory(userId);

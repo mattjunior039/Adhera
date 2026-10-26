@@ -44,7 +44,7 @@ class DoseVerificationEvent(Base):
     # False when the AM/PM color read was ambiguous (e.g. an off-angle reference frame) —
     # auto-calibration and wrong-slot detection are skipped in that case.
     period_confident: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # True once a per-user column-order profile exists (see PillboxOrientationProfile).
+    # True once a per-user column-order profile exists (see AdheraOrientationProfile).
     orientation_calibrated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # assumed_label != expected_label while calibrated — the user may have opened the wrong slot.
     wrong_slot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

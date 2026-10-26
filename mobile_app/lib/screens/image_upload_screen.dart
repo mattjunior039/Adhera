@@ -158,7 +158,7 @@ class _ImageUploadScreenState extends ConsumerState<ImageUploadScreen> {
                           const SizedBox(height: 8),
                           Text(
                             hasBaseline
-                                ? 'Capture current pillbox to compare'
+                                ? 'Capture current Adhera to compare'
                                 : 'Take your first photo to set a baseline',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -232,7 +232,7 @@ class _ImageUploadScreenState extends ConsumerState<ImageUploadScreen> {
                     child: Text(
                       hasBaseline
                           ? 'Will compare against your last captured photo'
-                          : 'First capture: sets your pillbox baseline',
+                          : 'First capture: sets your Adhera baseline',
                       style: TextStyle(
                         fontSize: 12,
                         color: hasBaseline

@@ -2,9 +2,9 @@
 
 **Adhera helps people take the right medication at the right time, and helps their caregivers confirm it.**
 
-**Project website: <https://mattjunior039.github.io/PillBox/>**
+**Project website: <https://mattjunior039.github.io/Adhera/>**
 
-Adhera pairs a smart weekly pillbox, which has a built-in lid camera, with a
+Adhera pairs a smart weekly organizer, which has a built-in lid camera, with a
 mobile app and a Python backend that runs on the local network. It turns a photo
 of a prescription label into a medication schedule, tracks what is in each
 compartment, and uses computer vision to flag when a pill appears to have been
@@ -31,10 +31,10 @@ reviewable evidence without claiming more certainty than the technology supports
 | **Prescription label scanning** | Points the camera at a pill bottle and captures several views. | The phone picks the sharpest frames and reads the text on the device (Apple Vision or Google ML Kit). The backend flattens the curved label with OpenCV for the review preview and parses the drug, strength, directions, refills, prescriber, and pharmacy locally. Drug names are checked against the NIH RxNorm database. |
 | **Patient and caregiver review** | Edits and confirms the scanned details; a care-team member approves or rejects them. | Nothing becomes a medication until both steps are complete. Duplicate approvals are blocked. |
 | **Weekly schedule** | Sets which days and times each medication is taken. | The dashboard shows today's doses as pending, taken, or missed. |
-| **Pillbox inventory** | Sees what is in each compartment of a 7-day AM/PM pillbox. | A 14-slot inventory is stored per user. |
+| **Adhera inventory** | Sees what is in each compartment of a 7-day AM/PM Adhera organizer. | A 14-slot inventory is stored per user. |
 | **Alerts and care team** | Gets alerts for missed doses and invites family members or caregivers. | Missed doses appear in Home and Alerts with a configurable alert phone number. |
 | **Pill identification** | Photographs a loose pill. | A DINOv2 vision model compares the photo with reference images and suggests the closest match, always marked for review. |
-| **Video dose verification** | Records a short video of taking a pill from the pillbox. | YOLOv8 models find the seven compartments, count the pills in each one before and after, and report a *candidate* removal or transfer for a person to review. |
+| **Video dose verification** | Records a short video of taking a pill from Adhera. | YOLOv8 models find the seven compartments, count the pills in each one before and after, and report a *candidate* removal or transfer for a person to review. |
 
 ## How it works
 
@@ -50,7 +50,7 @@ flowchart LR
         OCR[Label flattening + local label parser]
         Rx[RxNorm drug-name matching]
         ID[DINOv2 pill identification]
-        Video[YOLOv8 pillbox video analysis]
+        Video[YOLOv8 Adhera video analysis]
     end
     DB[(SQLite or PostgreSQL)]
     RxNav[[NIH RxNav API]]
@@ -76,13 +76,12 @@ flowchart LR
 | Website | React 19, TypeScript, Vite, Tailwind CSS, Three.js (React Three Fiber), deployed with GitHub Pages |
 | Tooling | Docker Compose, GitHub Actions, pytest/unittest, flutter_test, flutter_lints, Ruff, oxlint, ffmpeg (dataset preparation) |
 
-More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Designed for safety and privacy
 
 Medication software has to be honest about what it knows. Adhera follows these rules:
 
-- **Local processing.** Label photos, pill photos, and pillbox video are
+- **Local processing.** Label photos, pill photos, and Adhera video are
   processed by the Adhera backend on your own network; images are never sent to
   an outside service. The only external lookup is the drug *name* sent to NIH
   RxNorm, and setting `RXNORM_LOOKUP_MODE=local` removes even that.
@@ -93,9 +92,7 @@ Medication software has to be honest about what it knows. Adhera follows these r
   models cannot be biased toward the answer the app expects.
 - **Two-step prescription approval.** The patient confirms the scanned details
   and a caregiver approves them before a medication is created.
-- **Clear limits.** The video model was trained on one specific pillbox layout
-  and three medications. Results are documented openly, including failures, in
-  [docs/VISION_RESEARCH.md](docs/VISION_RESEARCH.md).
+- **Clear limits.** The video model was trained on limited number of medications.
 
 ## Getting started
 
@@ -118,8 +115,8 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 Check that it is running with `curl http://127.0.0.1:8000/health`. Interactive
 API documentation is at <http://127.0.0.1:8000/docs>.
 
-The backend uses SQLite by default. To run with PostgreSQL in Docker, see
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The backend uses SQLite by default. To run with PostgreSQL in Docker, use
+`backend_api/docker-compose.yml`.
 
 ### 2. Mobile app
 
@@ -152,7 +149,7 @@ Pill identification downloads the DINOv2 model the first time it is used.
 Video verification uses locally trained YOLOv8 checkpoints in
 `backend_api/runs/`, which are not committed because of their size. Without
 them, those endpoints return a clear "unavailable" message and the rest of the
-app still works. See [docs/VISION_RESEARCH.md](docs/VISION_RESEARCH.md) to
+app still works. See [backend_api/scripts/README.md](backend_api/scripts/README.md) to
 reproduce training.
 
 ## Repository layout
@@ -177,8 +174,6 @@ reproduce training.
 │   ├── datasets/          Reference images and lookup data
 │   └── tests/             Backend tests
 ├── website/               Project website (React + Vite), published to GitHub Pages
-├── sample_data/           Development photos and videos
-├── docs/                  Architecture, deployment, and research notes
 └── .github/workflows/     Website build and deployment
 ```
 
@@ -195,7 +190,7 @@ cd mobile_app && flutter analyze && flutter test
 cd website && npm ci && npm run lint && npm run build
 ```
 
-There are 95 backend tests and 38 Flutter tests. They cover login, adherence
+There are 100 backend tests and 38 Flutter tests. They cover login, adherence
 rules, inventory, label parsing (including a full scan with network access
 blocked), RxNorm matching, video-comparison logic, API
 error handling, navigation, the camera workflow (with a simulated camera), and
@@ -209,7 +204,7 @@ website uses TypeScript and oxlint.
   recordings when the before and after moments were marked by hand. Automatic
   timing did not yet succeed. These recordings were also used during
   development, so this is a progress check, not a measure of real-world accuracy.
-- The video models support one pillbox layout (seven blue PM compartments) and
+- The video models support one Adhera organizer layout (seven blue PM compartments) and
   three pills: acetaminophen, ibuprofen, and iron. Iron detection is unreliable.
 
 ## Roadmap
@@ -220,22 +215,3 @@ website uses TypeScript and oxlint.
 3. More training data (more sessions, lighting conditions, and "no removal"
    examples) and automatic detection of the before and after moments.
 4. Database migrations for production deployments.
-
-## Documentation
-
-| Document | Contents |
-| --- | --- |
-| [Project website](https://mattjunior039.github.io/PillBox/) | The problem, the smart pillbox, how Adhera works, and the team |
-| [Architecture](docs/ARCHITECTURE.md) | How the app, backend, database, and vision pipelines fit together |
-| [Deployment](docs/DEPLOYMENT.md) | Docker, PostgreSQL, configuration, and production notes |
-| [Vision research](docs/VISION_RESEARCH.md) | Dataset preparation, training, evaluation, and results for the video models |
-| [Mobile app](mobile_app/README.md) | Running on simulators and devices, plus app behavior notes |
-| [Backend scripts](backend_api/scripts/README.md) | Training and support utilities |
-| [Website source](website/README.md) | Running, editing, and deploying the project website |
-| [Sample data](sample_data/README.md) | Development media and dataset rebuilding |
-| [Contributing](CONTRIBUTING.md) | Workflow, checks, and rules for secrets |
-
-## Keeping data out of the repository
-
-Never commit patient photos or videos, databases, uploads, `.env` files, or
-credentials. All of these are excluded by `.gitignore`.

@@ -20,7 +20,7 @@ venv/
 backend_api/.env
 backend_api/*.db
 backend_api/*.sqlite3
-backend_api/pillbox.db
+backend_api/adhera.db
 backend_api/postgres_log.txt
 backend_api/runs/
 backend_api/uploads/**

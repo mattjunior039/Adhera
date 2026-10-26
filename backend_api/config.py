@@ -20,12 +20,12 @@ def get_database_url() -> str:
         return database_url
 
     if os.getenv("USE_SQLITE", "true").lower() in {"1", "true", "yes", "y"}:
-        sqlite_path = Path(__file__).resolve().parent / "pillbox.db"
+        sqlite_path = Path(__file__).resolve().parent / "adhera.db"
         return f"sqlite+aiosqlite:///{sqlite_path}"
 
-    user = os.getenv("POSTGRES_USER", "pillbox_user")
-    password = os.getenv("POSTGRES_PASSWORD", "pillbox_password")
+    user = os.getenv("POSTGRES_USER", "adhera_user")
+    password = os.getenv("POSTGRES_PASSWORD", "adhera_password")
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
-    db_name = os.getenv("POSTGRES_DB", "pillbox")
+    db_name = os.getenv("POSTGRES_DB", "adhera")
     return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}"

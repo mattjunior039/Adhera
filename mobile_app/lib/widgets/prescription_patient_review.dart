@@ -53,7 +53,6 @@ class _PrescriptionPatientReviewState extends State<PrescriptionPatientReview> {
 
   @override
   Widget build(BuildContext context) {
-    final r = widget.result;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -103,115 +102,6 @@ class _PrescriptionPatientReviewState extends State<PrescriptionPatientReview> {
             ),
           ),
           const SizedBox(height: 16),
-          // Prescription metadata (read-only)
-          if (r.prescribedBy != null ||
-              r.pharmacy != null ||
-              r.refillsRemaining != null)
-            Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'From label',
-                      style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: Colors.grey.shade600),
-                    ),
-                    const SizedBox(height: 8),
-                    if (r.prescribedBy != null)
-                      _metaRow(
-                        Icons.medical_services_outlined,
-                        'Prescriber',
-                        r.prescribedBy!,
-                      ),
-                    if (r.pharmacy != null)
-                      _metaRow(
-                        Icons.local_pharmacy_outlined,
-                        'Pharmacy',
-                        r.pharmacy!,
-                      ),
-                    if (r.refillsRemaining != null)
-                      _metaRow(
-                        Icons.refresh_rounded,
-                        'Refills remaining',
-                        r.refillsRemaining!,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          if (r.ocrProviderChain != null || r.requiresHumanReview == true)
-            Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Scan quality',
-                      style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: Colors.grey.shade600),
-                    ),
-                    const SizedBox(height: 8),
-                    if (r.ocrProviderChain != null &&
-                        r.ocrProviderChain!.isNotEmpty)
-                      _metaRow(
-                        Icons.layers_outlined,
-                        'OCR providers',
-                        r.ocrProviderChain!.join(' -> '),
-                      ),
-                    if (r.qualityGate != null &&
-                        r.qualityGate!['reason'] != null)
-                      _metaRow(
-                        Icons.analytics_outlined,
-                        'QC status',
-                        r.qualityGate!['reason'].toString(),
-                      ),
-                    if (r.medicationNameMatched != null ||
-                        r.medicationNameSource != null ||
-                        r.medicationNameRxcui != null)
-                      _metaRow(
-                        Icons.medication_liquid_outlined,
-                        'Name match',
-                        [
-                          if (r.medicationNameMatched != null)
-                            (r.medicationNameMatched!
-                                ? 'matched'
-                                : 'unmatched'),
-                          if (r.medicationNameConfidence != null &&
-                              r.medicationNameConfidence!.isNotEmpty)
-                            'confidence: ${r.medicationNameConfidence}',
-                          if (r.medicationNameMatchScore != null)
-                            'score: ${r.medicationNameMatchScore!.toStringAsFixed(2)}',
-                        ].join('  •  '),
-                      ),
-                    if (r.medicationNameSource != null &&
-                        r.medicationNameSource!.isNotEmpty)
-                      _metaRow(
-                        Icons.hub_outlined,
-                        'Name source',
-                        r.medicationNameSource!,
-                      ),
-                    if (r.medicationNameRxcui != null &&
-                        r.medicationNameRxcui!.isNotEmpty)
-                      _metaRow(
-                        Icons.badge_outlined,
-                        'RxCUI',
-                        r.medicationNameRxcui!,
-                      ),
-                    if (r.requiresHumanReview == true)
-                      _metaRow(
-                        Icons.fact_check_outlined,
-                        'Review',
-                        'Required before auto-fill acceptance',
-                      ),
-                  ],
-                ),
-              ),
-            ),
           // Editable fields
           Text(
             'Medication details',
@@ -325,19 +215,4 @@ class _PrescriptionPatientReviewState extends State<PrescriptionPatientReview> {
       ),
     );
   }
-
-  Widget _metaRow(IconData icon, String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(
-      children: [
-        Icon(icon, size: 15, color: Colors.grey.shade500),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
-      ],
-    ),
-  );
 }

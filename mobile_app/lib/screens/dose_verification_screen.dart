@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../repositories/adhera_inventory_repository.dart';
 import '../repositories/dose_verification_repository.dart';
 import '../repositories/medication_repository.dart';
-import '../repositories/pillbox_inventory_repository.dart';
 import '../services/api_service.dart';
 import '../widgets/app_navigation.dart';
 
@@ -23,7 +23,7 @@ class _DoseVerificationVideoScreenState
   File? _selectedVideo;
   bool _isBusy = false;
   String? _error;
-  PillboxInventorySlot? _selectedCompartment;
+  AdheraInventorySlot? _selectedCompartment;
   final _phaseTimes = List.generate(4, (_) => TextEditingController());
 
   @override
@@ -37,9 +37,9 @@ class _DoseVerificationVideoScreenState
   Future<void> _initializeInventory(int userId) async {
     try {
       await ref
-          .read(pillboxInventoryRepositoryProvider)
+          .read(adheraInventoryRepositoryProvider)
           .initializeTestInventory(userId);
-      ref.invalidate(pillboxInventoryProvider(userId));
+      ref.invalidate(adheraInventoryProvider(userId));
     } on Exception catch (e) {
       if (mounted) {
         setState(
@@ -117,7 +117,7 @@ class _DoseVerificationVideoScreenState
         compartmentId: _selectedCompartment!.id,
         phaseWindows: phaseWindows,
       );
-      ref.invalidate(pillboxInventoryProvider(userId));
+      ref.invalidate(adheraInventoryProvider(userId));
       ref.invalidate(doseVerificationEventsProvider(userId));
       if (!mounted) return;
       context.push('/dose-verification-result', extra: result);
@@ -136,7 +136,7 @@ class _DoseVerificationVideoScreenState
   Widget build(BuildContext context) {
     final int userId =
         ref.watch(currentUserProvider)?.id ?? ref.watch(userIdProvider);
-    final inventory = ref.watch(pillboxInventoryProvider(userId));
+    final inventory = ref.watch(adheraInventoryProvider(userId));
 
     return Scaffold(
       appBar: AppBar(

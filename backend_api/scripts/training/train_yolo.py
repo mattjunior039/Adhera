@@ -30,7 +30,7 @@ def main() -> int:
     output_dir = BACKEND_DIR / "runs"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="pillbox-yolo-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="adhera-yolo-") as temp_dir:
         resolved_yaml = Path(temp_dir) / "dataset.yaml"
         resolved_yaml.write_text(yaml.safe_dump(dataset, sort_keys=False))
         model = YOLO("yolov8n.pt")

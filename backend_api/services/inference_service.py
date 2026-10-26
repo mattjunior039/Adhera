@@ -15,13 +15,13 @@ GRID_COLUMNS = 7
 GRID_ROWS = 2
 TOTAL_COMPARTMENTS = GRID_COLUMNS * GRID_ROWS
 
-# Canonical top-down pillbox size after perspective rectification. Kept wide/short
+# Canonical top-down Adhera size after perspective rectification. Kept wide/short
 # (7 columns x 2 rows) to match the physical AM/PM x weekday organizer layout.
 CANONICAL_WIDTH = 1400
 CANONICAL_HEIGHT = 400
 
 # Whole-frame quality gate thresholds. Mirrors the conservative pattern used by
-# ocr_service's label quality gate, tuned for a handheld pillbox scene rather than
+# ocr_service's label quality gate, tuned for a handheld Adhera scene rather than
 # a printed label (less texture, more likely to have glare on the plastic lids).
 _MIN_BLUR_SCORE = 15.0
 _MIN_MEAN_INTENSITY = 35.0
@@ -31,7 +31,7 @@ _MAX_GLOBAL_GLARE_RATIO = 0.35
 # Per-compartment occlusion threshold: a cell this saturated is unreadable, not empty.
 _MAX_CELL_GLARE_RATIO = 0.40
 
-# Only trust the pillbox-boundary contour if it covers a plausible fraction of the
+# Only trust the Adhera-boundary contour if it covers a plausible fraction of the
 # frame: too small to be the box, or so large it's probably background bleeding into
 # the brightness mask, both fall back to treating the whole frame as the region.
 _MIN_QUAD_AREA_RATIO = 0.15
@@ -93,7 +93,7 @@ def _order_quad_corners(points: np.ndarray) -> np.ndarray:
     height_left = np.linalg.norm(bl - tl)
 
     if height_left > width_top:
-        # The pillbox is rotated vertically in the frame.
+        # The Adhera organizer is rotated vertically in the frame.
         # Rotate the corner mapping by 90 degrees so it maps to a wide landscape image.
         rect[0] = bl
         rect[1] = tl
@@ -108,8 +108,8 @@ def _order_quad_corners(points: np.ndarray) -> np.ndarray:
     return rect
 
 
-def _detect_pillbox_quad(image: np.ndarray) -> np.ndarray:
-    """Locate the pillbox boundary and return its 4 corners (tl, tr, br, bl).
+def _detect_adhera_quad(image: np.ndarray) -> np.ndarray:
+    """Locate the Adhera boundary and return its 4 corners (tl, tr, br, bl).
 
     Falls back to the full frame if no confident quadrilateral can be found, so the
     rest of the pipeline degrades gracefully instead of failing outright (same
@@ -123,7 +123,7 @@ def _detect_pillbox_quad(image: np.ndarray) -> np.ndarray:
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-    # The pillbox's white/pastel plastic is markedly brighter than a wood-grain
+    # The Adhera organizer's white/pastel plastic is markedly brighter than a wood-grain
     # background; brightness segmentation is far more reliable on real handheld
     # footage than Canny edges, which fragment across busy wood-grain textures.
     _, mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -147,10 +147,10 @@ def _detect_pillbox_quad(image: np.ndarray) -> np.ndarray:
     return _order_quad_corners(np.array(box, dtype=np.float32))
 
 
-def _rectify_pillbox_color(image: np.ndarray) -> np.ndarray:
-    """Warp the detected pillbox region to a canonical top-down color view so
+def _rectify_adhera_color(image: np.ndarray) -> np.ndarray:
+    """Warp the detected Adhera region to a canonical top-down color view so
     compartment cells line up regardless of phone angle/rotation."""
-    quad = _detect_pillbox_quad(image)
+    quad = _detect_adhera_quad(image)
     destination = np.array(
         [
             [0, 0],
@@ -164,9 +164,9 @@ def _rectify_pillbox_color(image: np.ndarray) -> np.ndarray:
     return cv2.warpPerspective(image, matrix, (CANONICAL_WIDTH, CANONICAL_HEIGHT))
 
 
-def _rectify_pillbox(image: np.ndarray) -> np.ndarray:
-    """Grayscale variant of `_rectify_pillbox_color`, used by the photo diff pipeline."""
-    warped = _rectify_pillbox_color(image)
+def _rectify_adhera(image: np.ndarray) -> np.ndarray:
+    """Grayscale variant of `_rectify_adhera_color`, used by the photo diff pipeline."""
+    warped = _rectify_adhera_color(image)
     return cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) if warped.ndim == 3 else warped
 
 
@@ -209,8 +209,8 @@ def detect_compartment_changes(
 
     # Perspective-correct both frames onto the same canonical grid before diffing,
     # so a rotated/angled phone shot still maps to the right compartment index.
-    baseline = _rectify_pillbox(baseline_raw)
-    current = _rectify_pillbox(current_raw)
+    baseline = _rectify_adhera(baseline_raw)
+    current = _rectify_adhera(current_raw)
 
     diff = cv2.absdiff(baseline, current)
     _, thresholded = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)

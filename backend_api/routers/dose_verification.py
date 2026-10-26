@@ -18,12 +18,12 @@ from backend_api.models.dose_verification_event import DoseVerificationEvent
 from backend_api.models.medication import Medication
 from backend_api.models.schedule import Schedule
 from backend_api.models.user import User
-from backend_api.schemas.dose_verification_event import DoseVerificationEventResponse
-from backend_api.schemas.pillbox_orientation import (
-    PillboxOrientationResponse,
-    PillboxOrientationUpdate,
+from backend_api.schemas.adhera_orientation import (
+    AdheraOrientationResponse,
+    AdheraOrientationUpdate,
 )
-from backend_api.services import pillbox_orientation_service as orientation_service
+from backend_api.schemas.dose_verification_event import DoseVerificationEventResponse
+from backend_api.services import adhera_orientation_service as orientation_service
 from backend_api.services.video_verification_service import (
     VideoAnalysisBusy,
     VideoModelUnavailable,
@@ -198,16 +198,16 @@ async def get_dose_verification_events(user_id: int, db: AsyncSession = Depends(
     return responses
 
 
-@router.get("/pillbox-orientation/{user_id}", response_model=Optional[PillboxOrientationResponse])
-async def get_pillbox_orientation(user_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/adhera-orientation/{user_id}", response_model=Optional[AdheraOrientationResponse])
+async def get_adhera_orientation(user_id: int, db: AsyncSession = Depends(get_db)):
     profile = await orientation_service.get_orientation_profile(db, user_id)
-    return PillboxOrientationResponse.model_validate(profile) if profile else None
+    return AdheraOrientationResponse.model_validate(profile) if profile else None
 
 
-@router.put("/pillbox-orientation/{user_id}", response_model=PillboxOrientationResponse)
-async def set_pillbox_orientation(
+@router.put("/adhera-orientation/{user_id}", response_model=AdheraOrientationResponse)
+async def set_adhera_orientation(
     user_id: int,
-    payload: PillboxOrientationUpdate,
+    payload: AdheraOrientationUpdate,
     db: AsyncSession = Depends(get_db),
 ):
     """Legacy orientation preferences; official blue PM videos have fixed orientation."""
@@ -215,4 +215,4 @@ async def set_pillbox_orientation(
         profile = await orientation_service.set_orientation_profile(db, user_id, payload.column_order)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return PillboxOrientationResponse.model_validate(profile)
+    return AdheraOrientationResponse.model_validate(profile)
